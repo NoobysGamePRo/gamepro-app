@@ -276,12 +276,16 @@ class VideoPanel(tk.Canvas):
 
     def _compute_warp(self):
         """Compute perspective transform from the 4 collected corner points."""
-        # Sort clicks into TL / TR / BR / BL regardless of click order
-        pts = sorted(self._corners_collected, key=lambda p: p[1])  # by Y
-        top2 = sorted(pts[:2], key=lambda p: p[0])   # lower X = left
-        bot2 = sorted(pts[2:], key=lambda p: p[0])   # lower X = left
-        tl, tr = top2
-        bl, br = bot2
+        # Sort clicks into TL / TR / BR / BL regardless of click order.
+        # Sum (x+y): smallest = TL, largest = BR.
+        # Diff (x-y): largest = TR (high x, low y), smallest = BL (low x, high y).
+        pts = self._corners_collected
+        s = [p[0] + p[1] for p in pts]
+        d = [p[0] - p[1] for p in pts]
+        tl = pts[s.index(min(s))]
+        br = pts[s.index(max(s))]
+        tr = pts[d.index(max(d))]
+        bl = pts[d.index(min(d))]
         src = np.array([tl, tr, br, bl], dtype=np.float32)
 
         # Output dimensions: average of opposite edge lengths

@@ -1157,9 +1157,9 @@ class GameProApp(tk.Tk):
             # External folder alongside the .exe — users can drop in new scripts
             return os.path.join(os.path.dirname(sys.executable), 'scripts')
         else:
-            # Development: use dist/scripts/ so both modes share the same folder
-            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            return os.path.join(base, 'dist', 'scripts')
+            # Development: gamepro-scripts lives alongside gamepro-app
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            return os.path.join(os.path.dirname(app_dir), 'gamepro-scripts')
 
     def _check_for_scripts(self):
         """Download the latest scripts from GitHub and refresh the tree."""
