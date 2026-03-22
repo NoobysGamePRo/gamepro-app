@@ -131,8 +131,11 @@ class GameProApp(tk.Tk):
         self._cal_dialog: Optional[CalibrationDialog] = None
         self._builder_dialog: Optional[ScriptBuilderDialog] = None
 
+        self._update_banner: Optional[tk.Frame] = None
+
         self._setup_style()
         self._build_header()
+        self._build_update_banner()
         self._build_hardware_row()
         self._build_main_area()
         self._build_footer()
@@ -223,6 +226,40 @@ class GameProApp(tk.Tk):
                  bg=BG, fg=FG, font=('Arial', 16, 'bold')).pack(anchor='w')
         tk.Label(title_frame, text='Automated game controller software',
                  bg=BG, fg=FG2, font=('Arial', 9)).pack(anchor='w')
+
+    # ── Update banner (hidden until needed) ───────────────────────────────────
+
+    def _build_update_banner(self):
+        self._update_banner = tk.Frame(self, bg='#ccaa00', pady=4)
+        # Not packed yet — shown only when an update is found
+
+    def _show_update_banner(self, latest: str):
+        """Show a yellow banner below the header with a download link."""
+        banner = self._update_banner
+        # Clear any previous contents
+        for w in banner.winfo_children():
+            w.destroy()
+        msg = tk.Label(
+            banner,
+            text=f'  \u2605  Update available: {latest}  (you have {APP_VERSION})  —  click to download',
+            bg='#ccaa00', fg='#000000',
+            font=('Arial', 10, 'bold'),
+            cursor='hand2',
+        )
+        msg.pack(side='left', padx=8)
+        msg.bind('<Button-1>', lambda e: webbrowser.open(APP_DOWNLOAD_URL))
+
+        close_btn = tk.Label(banner, text='✕', bg='#ccaa00', fg='#000000',
+                             font=('Arial', 11, 'bold'), cursor='hand2', padx=8)
+        close_btn.pack(side='right')
+        close_btn.bind('<Button-1>', lambda e: banner.pack_forget())
+
+        # Insert between header and hardware row
+        banner.pack(fill='x', after=self._find_header_frame())
+
+    def _find_header_frame(self):
+        """Return the header frame widget so the banner can be inserted after it."""
+        return self.pack_slaves()[0]
 
     # ── Hardware row ──────────────────────────────────────────────────────────
 
@@ -946,9 +983,7 @@ class GameProApp(tk.Tk):
                     release = json.loads(resp.read().decode())
                 latest = release.get('tag_name', '').strip()
                 if latest and latest != APP_VERSION:
-                    self.after(0, lambda: self._log(
-                        f'Update available: {latest}  (you have {APP_VERSION})\n'
-                        f'  Download at: {APP_DOWNLOAD_URL}'))
+                    self.after(0, lambda v=latest: self._show_update_banner(v))
             except Exception:
                 pass   # silently ignore — no internet, rate limit, etc.
 

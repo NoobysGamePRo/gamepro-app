@@ -14,8 +14,8 @@ if %ERRORLEVEL% neq 0 (
 )
 
 REM Build to TEMP to avoid OneDrive file-lock on dist\GamePRo.exe
-set TMPWORK=%TEMP%\gamepro_work
-set TMPDIST=%TEMP%\gamepro_dist
+set TMPWORK=%LOCALAPPDATA%\Temp\gamepro_work
+set TMPDIST=%LOCALAPPDATA%\Temp\gamepro_dist
 
 echo Building GamePRo.exe ...
 echo (building outside OneDrive to avoid file-lock issues)
