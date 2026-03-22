@@ -69,7 +69,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.2'
+APP_VERSION     = 'v1.3'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
