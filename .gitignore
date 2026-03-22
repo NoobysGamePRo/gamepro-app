@@ -1,0 +1,19 @@
+# Build output
+dist/
+build/
+*.spec.bak
+
+# PyInstaller temp
+__pycache__/
+*.py[cod]
+*.pyo
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Secrets / local config
+*.env
