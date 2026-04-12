@@ -74,8 +74,9 @@ class ScriptBuilderDialog(tk.Toplevel):
         self._last_click_time  = 0.0
         self._timer_id         = None
 
-        self._test_running  = False
-        self._test_stop     = threading.Event()
+        self._test_running      = False
+        self._test_current_idx  = None   # step index being executed during test
+        self._test_stop         = threading.Event()
 
         self._canvas_mode  = None    # None | 'detect'
         self._drag_start   = None
@@ -513,6 +514,7 @@ class ScriptBuilderDialog(tk.Toplevel):
             if self._test_stop.is_set():
                 break
 
+            self._test_current_idx = idx
             # Highlight current step in the list
             self.after(0, lambda i=idx: (
                 self._step_list.selection_clear(0, 'end'),
@@ -588,7 +590,8 @@ class ScriptBuilderDialog(tk.Toplevel):
                 time.sleep(0.15)
 
         def _done():
-            self._test_running = False
+            self._test_running     = False
+            self._test_current_idx = None
             self._test_btn.config(state='normal')
             self._test_stop_btn.config(state='disabled')
             self._rec_btn.config(state='normal')
@@ -1135,17 +1138,19 @@ class ScriptBuilderDialog(tk.Toplevel):
         frame = self._grabber.get_latest_frame() if self._grabber else None
         if frame is not None:
             display = cv2.resize(frame, (CANVAS_W, CANVAS_H))
-            # Draw detect regions as blue outlines — suppressed during test
-            if not self._test_running:
-                for s in self._steps:
-                    if s.get('type') == 'detect' and s.get('region'):
-                        fx, fy, fw, fh = s['region']
-                        cx = int(fx / SCALE)
-                        cy = int(fy / SCALE)
-                        cw = int(fw / SCALE)
-                        ch = int(fh / SCALE)
-                        cv2.rectangle(display, (cx, cy), (cx + cw, cy + ch),
-                                      (255, 128, 0), 1)
+            # Draw detect region box — only for the active/selected step
+            show_idx = (self._test_current_idx if self._test_running
+                        else self._sel_idx)
+            if show_idx is not None and show_idx < len(self._steps):
+                s = self._steps[show_idx]
+                if s.get('type') == 'detect' and s.get('region'):
+                    fx, fy, fw, fh = s['region']
+                    cx = int(fx / SCALE)
+                    cy = int(fy / SCALE)
+                    cw = int(fw / SCALE)
+                    ch = int(fh / SCALE)
+                    cv2.rectangle(display, (cx, cy), (cx + cw, cy + ch),
+                                  (255, 128, 0), 2)
             img = Image.fromarray(cv2.cvtColor(display, cv2.COLOR_BGR2RGB))
             self._photo = ImageTk.PhotoImage(img)
             self._canvas.create_image(0, 0, anchor='nw', image=self._photo)
@@ -1443,8 +1448,11 @@ class ScriptBuilderDialog(tk.Toplevel):
 
                     # ── Region / colour setup ──────────────────────────────
                     if is_fixed:
-                        # Baked-in region from builder
-                        lines += [f'{indent}x, y, w, h = self.{px}_REGION']
+                        # Baked-in region from builder — convert to warp-space if corners used
+                        if has_corners:
+                            lines += [f'{indent}x, y, w, h = self._frame_to_warp(self.{px}_REGION, warp_info)']
+                        else:
+                            lines += [f'{indent}x, y, w, h = self.{px}_REGION']
                         if mth == 'target_color':
                             lines += [f'{indent}tr, tg, tb = self.{px}_TARGET']
                         else:
@@ -1956,6 +1964,20 @@ class ScriptBuilderDialog(tk.Toplevel):
             L += [
                 '',
                 '    # ── Coordinate conversion helpers ─────────────────────────────────────',
+                '',
+                '    def _frame_to_warp(self, frame_rect, warp_info):',
+                '        """Convert a rectangle in full-frame pixels to warped-frame pixels."""',
+                '        import numpy as np',
+                '        fx, fy, fw, fh = frame_rect',
+                '        corners = np.array([[fx, fy], [fx+fw, fy],',
+                '                            [fx+fw, fy+fh], [fx, fy+fh]],',
+                '                           dtype=np.float32).reshape(-1, 1, 2)',
+                '        wc = cv2.perspectiveTransform(corners, warp_info[\'matrix\'])',
+                '        x_min = float(wc[:, :, 0].min())',
+                '        x_max = float(wc[:, :, 0].max())',
+                '        y_min = float(wc[:, :, 1].min())',
+                '        y_max = float(wc[:, :, 1].max())',
+                '        return int(x_min), int(y_min), max(1, int(x_max - x_min)), max(1, int(y_max - y_min))',
                 '',
                 '    def _canvas_to_warp(self, canvas_rect, warp_info):',
                 '        """Convert a rectangle in canvas pixels to warped-frame pixels."""',
