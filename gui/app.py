@@ -47,6 +47,15 @@ from gui.script_builder import ScriptBuilderDialog
 from gui.video_panel import VideoPanel
 from scripts.base_script import BaseScript
 
+# ── Manual command chars (action name → Arduino byte) ─────────────────────────
+# Used by the manual worker to fire commands without waiting for ACK.
+_MANUAL_CHARS = {
+    'press_a':     'a', 'press_b':    'b', 'press_x':   'x', 'press_y':   'y',
+    'press_up':    'e', 'press_down': 'd', 'press_left': 's', 'press_right': 'f',
+    'hold_up':     '8', 'hold_down':  '2', 'hold_left':  '4', 'hold_right':  '6',
+    'release_all': '0', 'soft_reset': 'S', 'soft_reset_z': 'Z', 'wonder_trade': 'W',
+}
+
 # ── Brand colours ─────────────────────────────────────────────────────────────
 BG       = '#1a2d6b'   # Deep navy (main background)
 BG2      = '#0f1d4a'   # Darker navy (panels, inputs)
@@ -721,13 +730,18 @@ class GameProApp(tk.Tk):
         self._manual_queue.put_nowait(action_name)
 
     def _manual_worker_loop(self):
-        """Single background thread that executes manual commands one at a time."""
+        """Single background thread that executes manual commands one at a time.
+        Uses fire() (no ACK wait) so the servo responds immediately."""
         while True:
             action_name = self._manual_queue.get()   # blocks until a command arrives
             if not self._controller or not self._controller.is_open():
                 continue
             try:
-                getattr(self._controller, action_name)()
+                char = _MANUAL_CHARS.get(action_name)
+                if char:
+                    self._controller.fire(char)
+                else:
+                    getattr(self._controller, action_name)()
             except Exception as e:
                 self.after(0, lambda err=e: self._log(f'Control error: {err}'))
 

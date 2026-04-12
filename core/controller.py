@@ -157,6 +157,17 @@ class GameProController:
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
+    def fire(self, char: str):
+        """
+        Send a command byte without waiting for the ACK.  Use for manual
+        one-off button presses where low latency matters more than
+        synchronisation.  Flushes the input buffer first so stale ACK bytes
+        from any previous no-wait send don't confuse a later _send() call.
+        """
+        with self._lock:
+            self._serial.reset_input_buffer()
+            self._serial.write(char.encode('ascii'))
+
     def _send(self, char: str):
         """
         Send a single command byte and wait for the ACK byte ('K') from
