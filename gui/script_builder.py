@@ -137,8 +137,8 @@ class ScriptBuilderDialog(tk.Toplevel):
         vsb.pack(side='right', fill='y')
         self._step_list.bind('<<ListboxSelect>>', self._on_step_select)
 
-        # Step control buttons
-        ctrl = tk.Frame(left, bg=BG, padx=6, pady=3)
+        # Step control buttons — row 1: list management
+        ctrl = tk.Frame(left, bg=BG, padx=6, pady=2)
         ctrl.pack(fill='x')
         bs = dict(bg=BG3, fg=FG, relief='flat', font=('Arial', 8),
                   cursor='hand2', padx=4, pady=2)
@@ -147,21 +147,25 @@ class ScriptBuilderDialog(tk.Toplevel):
         tk.Button(ctrl, text='Del', command=self._delete_step,
                   bg=ACCENT, fg=FG, relief='flat', font=('Arial', 8),
                   cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
-        tk.Button(ctrl, text='+ Wait', command=self._add_wait, **bs).pack(side='left', padx=2)
-        tk.Button(ctrl, text='+ Rand', command=self._add_random_wait,
-                  bg='#4a3a0a', fg=FG, relief='flat', font=('Arial', 8),
-                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
-        tk.Button(ctrl, text='+ LDR', command=self._add_ldr,
-                  bg='#3a1a5c', fg=FG, relief='flat', font=('Arial', 8),
-                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
-        tk.Button(ctrl, text='+ Block', command=self._add_block,
-                  bg='#335577', fg=FG, relief='flat', font=('Arial', 8),
-                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
-        tk.Button(ctrl, text='+ Detect', command=self._start_draw,
-                  bg='#1a5c1a', fg=FG, relief='flat', font=('Arial', 8),
-                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
         tk.Button(ctrl, text='⧖ Adjust All', command=self._adjust_timings_dialog,
                   bg='#44337a', fg=FG, relief='flat', font=('Arial', 8),
+                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
+
+        # Step control buttons — row 2: add step types
+        ctrl2 = tk.Frame(left, bg=BG, padx=6, pady=2)
+        ctrl2.pack(fill='x')
+        tk.Button(ctrl2, text='+ Wait', command=self._add_wait, **bs).pack(side='left', padx=2)
+        tk.Button(ctrl2, text='+ Rand', command=self._add_random_wait,
+                  bg='#4a3a0a', fg=FG, relief='flat', font=('Arial', 8),
+                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
+        tk.Button(ctrl2, text='+ Detect', command=self._start_draw,
+                  bg='#1a5c1a', fg=FG, relief='flat', font=('Arial', 8),
+                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
+        tk.Button(ctrl2, text='+ LDR', command=self._add_ldr,
+                  bg='#3a1a5c', fg=FG, relief='flat', font=('Arial', 8),
+                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
+        tk.Button(ctrl2, text='+ Block', command=self._add_block,
+                  bg='#335577', fg=FG, relief='flat', font=('Arial', 8),
                   cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
 
         # Step editor

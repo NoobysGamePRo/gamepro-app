@@ -23,6 +23,7 @@ Layout:
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+import queue
 import importlib.util
 import json
 import os
@@ -137,6 +138,12 @@ class GameProApp(tk.Tk):
         self._builder_dialog: Optional[ScriptBuilderDialog] = None
 
         self._update_banner: Optional[tk.Frame] = None
+
+        # Manual control worker — single thread, latest-only queue (size 1)
+        self._manual_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._manual_worker_thread = threading.Thread(
+            target=self._manual_worker_loop, daemon=True)
+        self._manual_worker_thread.start()
 
         self._setup_style()
         self._build_header()
@@ -701,18 +708,28 @@ class GameProApp(tk.Tk):
                 pass
 
     def _manual_send(self, action_name: str):
-        """Send a single command via the persistent controller (runs in background thread)."""
+        """Queue a manual command. If a command is already pending, replace it
+        with the newer one so rapid presses never pile up."""
         if not self._controller or not self._controller.is_open():
             self._log('Not connected — select a serial port first.')
             return
+        # Drop the stale pending command (if any) and put the latest one
+        try:
+            self._manual_queue.get_nowait()
+        except queue.Empty:
+            pass
+        self._manual_queue.put_nowait(action_name)
 
-        def _do():
+    def _manual_worker_loop(self):
+        """Single background thread that executes manual commands one at a time."""
+        while True:
+            action_name = self._manual_queue.get()   # blocks until a command arrives
+            if not self._controller or not self._controller.is_open():
+                continue
             try:
                 getattr(self._controller, action_name)()
             except Exception as e:
-                self.after(0, lambda: self._log(f'Control error: {e}'))
-
-        threading.Thread(target=_do, daemon=True).start()
+                self.after(0, lambda err=e: self._log(f'Control error: {err}'))
 
     def _draw_light_dial(self, value: int):
         """Draw a semicircular dial showing value (0–1020)."""
