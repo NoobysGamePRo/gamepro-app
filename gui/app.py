@@ -69,7 +69,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.3'
+APP_VERSION     = 'v1.5'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
@@ -102,6 +102,11 @@ class ToolTip:
         if self._tip:
             self._tip.destroy()
             self._tip = None
+
+
+def _version_tuple(v: str):
+    """Convert 'v1.4' or '1.4.0' to a comparable tuple of ints."""
+    return tuple(int(x) for x in v.lstrip('v').split('.') if x.isdigit())
 
 
 class GameProApp(tk.Tk):
@@ -982,7 +987,7 @@ class GameProApp(tk.Tk):
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     release = json.loads(resp.read().decode())
                 latest = release.get('tag_name', '').strip()
-                if latest and latest != APP_VERSION:
+                if latest and _version_tuple(latest) > _version_tuple(APP_VERSION):
                     self.after(0, lambda v=latest: self._show_update_banner(v))
             except Exception:
                 pass   # silently ignore — no internet, rate limit, etc.
@@ -1020,9 +1025,12 @@ class GameProApp(tk.Tk):
                          bg=BG2, fg=FG2,
                          font=('Arial', 9, 'underline'),
                          cursor='hand2')
-        link.pack()
+        link.pack(side='left', expand=True)
         link.bind('<Button-1>',
                   lambda e: webbrowser.open('https://www.noobysgamepro.com'))
+
+        tk.Label(footer, text=APP_VERSION, bg=BG2, fg=FG2,
+                 font=('Arial', 9)).pack(side='right', padx=8)
 
     # ── Port / webcam population ──────────────────────────────────────────────
 

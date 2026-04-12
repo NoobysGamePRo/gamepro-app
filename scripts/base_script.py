@@ -90,6 +90,40 @@ class BaseScript(ABC):
         return True
 
     @staticmethod
+    def warp_frame(frame, warp_info: dict):
+        """
+        Apply a perspective warp to a BGR frame.
+        warp_info is the dict returned by request_calibration(mode='corners'):
+            {'matrix': ndarray, 'out_w': int, 'out_h': int}
+        Returns the warped frame, or the original frame if warp_info is None.
+        """
+        import cv2
+        if warp_info is None:
+            return frame
+        return cv2.warpPerspective(
+            frame, warp_info['matrix'], (warp_info['out_w'], warp_info['out_h'])
+        )
+
+    @staticmethod
+    def count_target_pixels(frame, x: int, y: int, w: int, h: int,
+                             tr: float, tg: float, tb: float,
+                             tolerance: int) -> int:
+        """
+        Count pixels in region (x, y, w, h) whose R, G, B values are each
+        within `tolerance` of the target colour (tr, tg, tb).
+        Frame is a BGR numpy ndarray.
+        """
+        import numpy as np
+        region = frame[y:y + h, x:x + w]   # BGR
+        b, g, r = region[:, :, 0], region[:, :, 1], region[:, :, 2]
+        mask = (
+            (np.abs(r.astype(int) - tr) <= tolerance) &
+            (np.abs(g.astype(int) - tg) <= tolerance) &
+            (np.abs(b.astype(int) - tb) <= tolerance)
+        )
+        return int(mask.sum())
+
+    @staticmethod
     def avg_rgb(frame, x: int, y: int, w: int, h: int) -> Tuple[float, float, float]:
         """
         Return the average (R, G, B) of a rectangular region in a BGR frame.

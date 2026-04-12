@@ -60,7 +60,7 @@ class ScriptBuilderDialog(tk.Toplevel):
         super().__init__(parent)
         self.title('GamePRo Script Builder')
         self.configure(bg=BG)
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.transient(parent)
 
         self._grabber     = frame_grabber
@@ -77,10 +77,10 @@ class ScriptBuilderDialog(tk.Toplevel):
         self._test_running  = False
         self._test_stop     = threading.Event()
 
-        self._canvas_mode  = None    # None | 'detect' | 'crop'
+        self._canvas_mode  = None    # None | 'detect'
         self._drag_start   = None
         self._drag_rect_id = None
-        self._crop_region  = None    # [fx, fy, fw, fh] in raw-frame pixels
+        self._use_corners_var = tk.BooleanVar(value=True)
 
         self._build()
         self._update_video()
@@ -148,6 +148,12 @@ class ScriptBuilderDialog(tk.Toplevel):
                   bg=ACCENT, fg=FG, relief='flat', font=('Arial', 8),
                   cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
         tk.Button(ctrl, text='+ Wait', command=self._add_wait, **bs).pack(side='left', padx=2)
+        tk.Button(ctrl, text='+ Rand', command=self._add_random_wait,
+                  bg='#4a3a0a', fg=FG, relief='flat', font=('Arial', 8),
+                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
+        tk.Button(ctrl, text='+ LDR', command=self._add_ldr,
+                  bg='#3a1a5c', fg=FG, relief='flat', font=('Arial', 8),
+                  cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
         tk.Button(ctrl, text='+ Block', command=self._add_block,
                   bg='#335577', fg=FG, relief='flat', font=('Arial', 8),
                   cursor='hand2', padx=4, pady=2).pack(side='left', padx=2)
@@ -191,7 +197,55 @@ class ScriptBuilderDialog(tk.Toplevel):
         self._delay_var = tk.DoubleVar(value=1.0)
         _field(ed, 'Delay (s):', self._delay_var, 0, 300, 0.25)
 
-        note_row = tk.Frame(ed, bg=BG2)
+        # Random wait min/max — hidden unless a random_wait step is selected
+        self._rw_min_var = tk.DoubleVar(value=0.5)
+        self._rw_max_var = tk.DoubleVar(value=2.0)
+        self._rw_row = tk.Frame(ed, bg=BG2)
+        self._rw_row.pack(fill='x', pady=1)
+        tk.Label(self._rw_row, text='Min (s):', bg=BG2, fg=FG,
+                 font=('Arial', 8), width=12, anchor='w').pack(side='left')
+        tk.Spinbox(self._rw_row, from_=0, to=300, increment=0.25,
+                   textvariable=self._rw_min_var, width=7,
+                   bg=BG, fg=FG, relief='flat', font=('Courier', 9),
+                   buttonbackground=BG3, insertbackground=FG).pack(side='left', padx=(0, 8))
+        tk.Label(self._rw_row, text='Max (s):', bg=BG2, fg=FG,
+                 font=('Arial', 8), anchor='w').pack(side='left')
+        tk.Spinbox(self._rw_row, from_=0, to=300, increment=0.25,
+                   textvariable=self._rw_max_var, width=7,
+                   bg=BG, fg=FG, relief='flat', font=('Courier', 9),
+                   buttonbackground=BG3, insertbackground=FG).pack(side='left')
+        self._rw_row.pack_forget()
+
+        # LDR fields — hidden unless an ldr step is selected
+        self._ldr_mode_var      = tk.StringVar(value='Below')
+        self._ldr_threshold_var = tk.IntVar(value=500)
+        self._ldr_row = tk.Frame(ed, bg=BG2)
+        self._ldr_row.pack(fill='x', pady=1)
+        tk.Label(self._ldr_row, text='Mode:', bg=BG2, fg=FG,
+                 font=('Arial', 8), width=12, anchor='w').pack(side='left')
+        ttk.Combobox(self._ldr_row, textvariable=self._ldr_mode_var,
+                     values=['Below', 'Above'], width=7,
+                     state='readonly').pack(side='left', padx=(0, 8))
+        tk.Label(self._ldr_row, text='Threshold:', bg=BG2, fg=FG,
+                 font=('Arial', 8), anchor='w').pack(side='left')
+        tk.Spinbox(self._ldr_row, from_=0, to=1020, increment=1,
+                   textvariable=self._ldr_threshold_var, width=5,
+                   bg=BG, fg=FG, relief='flat', font=('Courier', 9),
+                   buttonbackground=BG3, insertbackground=FG).pack(side='left', padx=(4, 0))
+        tk.Label(self._ldr_row, text=' /1020', bg=BG2, fg=FG2,
+                 font=('Arial', 7)).pack(side='left')
+        self._ldr_row.pack_forget()
+
+        self._ldr_test_btn = tk.Button(
+            ed, text='📊 Test LDR…', command=self._open_ldr_test,
+            bg='#2a1a4a', fg=FG, relief='flat', font=('Arial', 8),
+            cursor='hand2', padx=6, pady=2)
+        # hidden until ldr step selected
+        self._ldr_test_btn.pack(pady=(2, 0), anchor='w')
+        self._ldr_test_btn.pack_forget()
+
+        self._note_row = tk.Frame(ed, bg=BG2)
+        note_row = self._note_row
         note_row.pack(fill='x', pady=1)
         tk.Label(note_row, text='Note:', bg=BG2, fg=FG,
                  font=('Arial', 8), width=12, anchor='w').pack(side='left')
@@ -347,25 +401,16 @@ class ScriptBuilderDialog(tk.Toplevel):
             b.grid(row=r, column=c, padx=1, pady=1, sticky='ew')
             self._rec_btns[cmd] = b
 
-        # Crop controls row (above video canvas)
-        crop_row = tk.Frame(right, bg=BG, pady=2)
-        crop_row.pack(fill='x')
+        # Screen calibration option row (above video canvas)
+        cal_opt_row = tk.Frame(right, bg=BG, pady=2)
+        cal_opt_row.pack(fill='x')
 
-        self._crop_btn = tk.Button(
-            crop_row, text='✂ Crop Screen', command=self._start_crop,
-            bg='#334433', fg=FG, relief='flat', font=('Arial', 8),
-            cursor='hand2', padx=6, pady=2)
-        self._crop_btn.pack(side='left', padx=(0, 4))
-
-        self._clear_crop_btn = tk.Button(
-            crop_row, text='✗ Clear Crop', command=self._clear_crop,
-            bg='#443333', fg=FG, relief='flat', font=('Arial', 8),
-            cursor='hand2', padx=6, pady=2, state='disabled')
-        self._clear_crop_btn.pack(side='left', padx=(0, 8))
-
-        self._crop_status_lbl = tk.Label(crop_row, text='No crop — full webcam view',
-                                          bg=BG, fg=FG2, font=('Arial', 8))
-        self._crop_status_lbl.pack(side='left')
+        tk.Checkbutton(
+            cal_opt_row, text='4-corner screen calibration (ask user to click corners every run)',
+            variable=self._use_corners_var,
+            bg=BG, fg=FG, selectcolor=BG3, activebackground=BG, activeforeground=FG,
+            font=('Arial', 8), cursor='hand2',
+        ).pack(side='left', padx=(0, 4))
 
         # Video canvas
         self._canvas = tk.Canvas(
@@ -502,13 +547,36 @@ class ScriptBuilderDialog(tk.Toplevel):
                         break
                     time.sleep(0.05)
 
+            elif t == 'random_wait':
+                import random
+                lo, hi = s.get('min', 0.5), s.get('max', 2.0)
+                delay = random.uniform(lo, hi)
+                self.after(0, lambda i=idx, d=delay, a=lo, b=hi:
+                           self._status_lbl.config(
+                               text=f'Testing step {i+1}/{len(steps)}: Random Wait {d:.2f}s  ({a:.2f}–{b:.2f})'))
+                end = time.time() + delay
+                while time.time() < end:
+                    if self._test_stop.is_set():
+                        break
+                    time.sleep(0.05)
+
             elif t == 'detect':
                 # Detection steps require the full generated script — skip during test
                 skipped += 1
                 self.after(0, lambda i=idx:
                            self._status_lbl.config(
                                text=f'Testing step {i+1}/{len(steps)}: DETECT — skipped'))
-                time.sleep(0.3)   # brief pause so the user sees it was skipped
+                time.sleep(0.3)
+
+            elif t == 'ldr':
+                # LDR steps require hardware — skip during test
+                skipped += 1
+                thr = s.get('threshold', 500)
+                mode_str = '< ' if s.get('mode', 'below') == 'below' else '> '
+                self.after(0, lambda i=idx, m=mode_str, v=thr:
+                           self._status_lbl.config(
+                               text=f'Testing step {i+1}/{len(steps)}: LDR {m}{v} — skipped'))
+                time.sleep(0.3)
 
             elif t == 'block':
                 self.after(0, lambda n=s.get('name', 'Block'):
@@ -600,6 +668,11 @@ class ScriptBuilderDialog(tk.Toplevel):
             return f'[{s.get("button", "?"):5s}]  wait={s.get("delay", 0):.2f}s{note}'
         elif t == 'wait':
             return f'[Wait ]  {s.get("delay", 0):.2f}s{note}'
+        elif t == 'random_wait':
+            return f'[RandW]  {s.get("min", 0):.2f}–{s.get("max", 0):.2f}s{note}'
+        elif t == 'ldr':
+            arrow = '↓' if s.get('mode', 'below') == 'below' else '↑'
+            return f'[LDR{arrow} ]  thr={s.get("threshold", 500)}  win={s.get("window", 10):.1f}s{note}'
         elif t == 'detect':
             r   = s.get('region')
             loc = f'  ({r[0]},{r[1]} {r[2]}×{r[3]})' if r else '  (no region)'
@@ -646,6 +719,9 @@ class ScriptBuilderDialog(tk.Toplevel):
             self._window_var.set(s.get('window', 6.0))
             self._tol_var.set(s.get('tolerance', 25))
             if t == 'detect':
+                self._rw_row.pack_forget()
+                self._ldr_row.pack_forget()
+                self._ldr_test_btn.pack_forget()
                 r  = s.get('region')
                 bl = s.get('baseline')
                 self._region_lbl.config(
@@ -674,7 +750,35 @@ class ScriptBuilderDialog(tk.Toplevel):
                         text='Target: not set — pick via Compare Shiny Image')
                 self._on_method_change()
                 self._compare_btn.config(state='normal')
+            elif t == 'random_wait':
+                self._rw_min_var.set(round(s.get('min', 0.5), 3))
+                self._rw_max_var.set(round(s.get('max', 2.0), 3))
+                self._rw_row.pack(fill='x', pady=1, before=self._note_row)
+                self._ldr_row.pack_forget()
+                self._ldr_test_btn.pack_forget()
+                self._region_lbl.config(text='Region: —')
+                self._baseline_lbl.config(text='Baseline: —')
+                self._method_var.set('Avg RGB')
+                self._fixed_var.set(False)
+                self._px_threshold_row.pack_forget()
+                self._compare_btn.config(state='disabled')
+            elif t == 'ldr':
+                self._ldr_mode_var.set('Below' if s.get('mode', 'below') == 'below' else 'Above')
+                self._ldr_threshold_var.set(s.get('threshold', 500))
+                self._window_var.set(s.get('window', 10.0))
+                self._rw_row.pack_forget()
+                self._ldr_row.pack(fill='x', pady=1, before=self._note_row)
+                self._ldr_test_btn.pack(pady=(2, 0), anchor='w', before=self._note_row)
+                self._region_lbl.config(text='Region: —')
+                self._baseline_lbl.config(text='Baseline: —')
+                self._method_var.set('Avg RGB')
+                self._fixed_var.set(False)
+                self._px_threshold_row.pack_forget()
+                self._compare_btn.config(state='disabled')
             else:
+                self._rw_row.pack_forget()
+                self._ldr_row.pack_forget()
+                self._ldr_test_btn.pack_forget()
                 self._region_lbl.config(text='Region: —')
                 self._baseline_lbl.config(text='Baseline: —')
                 self._method_var.set('Avg RGB')
@@ -692,8 +796,16 @@ class ScriptBuilderDialog(tk.Toplevel):
             s['name'] = self._block_name_var.get().strip() or 'Block'
             self._refresh_list()
             return
-        s['delay'] = self._delay_var.get()
         s['note']  = self._note_var.get()
+        if s.get('type') == 'random_wait':
+            s['min'] = round(self._rw_min_var.get(), 3)
+            s['max'] = round(self._rw_max_var.get(), 3)
+        elif s.get('type') == 'ldr':
+            s['mode']      = 'below' if self._ldr_mode_var.get() == 'Below' else 'above'
+            s['threshold'] = self._ldr_threshold_var.get()
+            s['window']    = self._window_var.get()
+        else:
+            s['delay'] = self._delay_var.get()
         if s.get('type') == 'detect':
             s['window']       = self._window_var.get()
             s['tolerance']    = self._tol_var.get()
@@ -813,6 +925,25 @@ class ScriptBuilderDialog(tk.Toplevel):
         self._step_list.selection_set(idx)
         self._sel_idx = idx
 
+    def _add_ldr(self):
+        step = {'type': 'ldr', 'mode': 'below', 'threshold': 500,
+                'window': 10.0, 'interval': 0.1, 'note': ''}
+        idx  = (self._sel_idx + 1) if self._sel_idx is not None else len(self._steps)
+        self._steps.insert(idx, step)
+        self._refresh_list()
+        self._step_list.selection_set(idx)
+        self._sel_idx = idx
+        self._on_step_select()
+
+    def _add_random_wait(self):
+        step = {'type': 'random_wait', 'min': 0.5, 'max': 2.0, 'note': ''}
+        idx  = (self._sel_idx + 1) if self._sel_idx is not None else len(self._steps)
+        self._steps.insert(idx, step)
+        self._refresh_list()
+        self._step_list.selection_set(idx)
+        self._sel_idx = idx
+        self._on_step_select()
+
     def _delete_step(self):
         if self._sel_idx is None or not self._steps:
             return
@@ -853,30 +984,19 @@ class ScriptBuilderDialog(tk.Toplevel):
                  'Right-click to cancel.')
         self._status_lbl.config(text='Draw detection region on video…')
 
-    def _start_crop(self):
-        # If a crop is already active, clear it so the user draws on the raw frame
-        if self._crop_region:
-            self._clear_crop()
-        self._canvas_mode = 'crop'
-        self._drag_start = None
-        if self._drag_rect_id:
-            self._canvas.delete(self._drag_rect_id)
-            self._drag_rect_id = None
-        self._draw_hint_lbl.config(
-            text='Draw a rectangle around the game screen.  Right-click to cancel.')
-        self._status_lbl.config(text='Draw crop region on video…')
-
-    def _clear_crop(self):
-        self._crop_region = None
-        if self._grabber:
-            self._grabber.clear_crop()
-        self._crop_status_lbl.config(text='No crop — full webcam view')
-        self._clear_crop_btn.config(state='disabled')
-        self._crop_btn.config(bg='#334433')
+    def _open_ldr_test(self):
+        if self._sel_idx is None or self._sel_idx >= len(self._steps):
+            return
+        s = self._steps[self._sel_idx]
+        if s.get('type') != 'ldr':
+            return
+        def _apply(threshold):
+            s['threshold'] = threshold
+            self._ldr_threshold_var.set(threshold)
+            self._refresh_list()
+        LdrTestDialog(self, self._controller, s.get('threshold', 500), _apply)
 
     def _on_builder_close(self):
-        if self._grabber and self._crop_region:
-            self._grabber.clear_crop()
         self.destroy()
 
     def _on_drag_start(self, event):
@@ -920,18 +1040,6 @@ class ScriptBuilderDialog(tk.Toplevel):
             self._canvas.delete(self._drag_rect_id)
             self._drag_rect_id = None
         self._draw_hint_lbl.config(text='')
-
-        if mode == 'crop':
-            # Store crop and apply to frame grabber
-            self._crop_region = [fx, fy, fw, fh]
-            if self._grabber:
-                self._grabber.set_crop(fx, fy, fw, fh)
-            self._crop_status_lbl.config(text=f'Crop: {fx},{fy}  {fw}×{fh}')
-            self._clear_crop_btn.config(state='normal')
-            self._crop_btn.config(bg='#116611')
-            self._status_lbl.config(
-                text=f'Screen crop set: ({fx},{fy}) {fw}×{fh} — canvas now shows game screen only')
-            return
 
         # mode == 'detect'
         baseline = None
@@ -1023,16 +1131,17 @@ class ScriptBuilderDialog(tk.Toplevel):
         frame = self._grabber.get_latest_frame() if self._grabber else None
         if frame is not None:
             display = cv2.resize(frame, (CANVAS_W, CANVAS_H))
-            # Draw all detect regions as blue outlines
-            for s in self._steps:
-                if s.get('type') == 'detect' and s.get('region'):
-                    fx, fy, fw, fh = s['region']
-                    cx = int(fx / SCALE)
-                    cy = int(fy / SCALE)
-                    cw = int(fw / SCALE)
-                    ch = int(fh / SCALE)
-                    cv2.rectangle(display, (cx, cy), (cx + cw, cy + ch),
-                                  (255, 128, 0), 1)
+            # Draw detect regions as blue outlines — suppressed during test
+            if not self._test_running:
+                for s in self._steps:
+                    if s.get('type') == 'detect' and s.get('region'):
+                        fx, fy, fw, fh = s['region']
+                        cx = int(fx / SCALE)
+                        cy = int(fy / SCALE)
+                        cw = int(fw / SCALE)
+                        ch = int(fh / SCALE)
+                        cv2.rectangle(display, (cx, cy), (cx + cw, cy + ch),
+                                      (255, 128, 0), 1)
             img = Image.fromarray(cv2.cvtColor(display, cv2.COLOR_BGR2RGB))
             self._photo = ImageTk.PhotoImage(img)
             self._canvas.create_image(0, 0, anchor='nw', image=self._photo)
@@ -1047,9 +1156,8 @@ class ScriptBuilderDialog(tk.Toplevel):
         meta = {
             'console': self._console_var.get(),
             'setup':   self._setup_var.get(),
+            'corners': self._use_corners_var.get(),
         }
-        if self._crop_region:
-            meta['crop'] = self._crop_region
         return {'meta': meta, 'steps': self._steps}
 
     def _save(self):
@@ -1075,17 +1183,7 @@ class ScriptBuilderDialog(tk.Toplevel):
             self._setup_var.set(m.get('setup', ''))
             self._steps = data.get('steps', [])
             self._sel_idx = None
-            # Restore crop from spec
-            crop = m.get('crop')
-            if crop and len(crop) == 4:
-                self._crop_region = crop
-                if self._grabber:
-                    self._grabber.set_crop(*crop)
-                self._crop_status_lbl.config(text=f'Crop: {crop[0]},{crop[1]}  {crop[2]}×{crop[3]}')
-                self._clear_crop_btn.config(state='normal')
-                self._crop_btn.config(bg='#116611')
-            else:
-                self._clear_crop()
+            self._use_corners_var.set(m.get('corners', True))
             self._refresh_list()
             self._status_lbl.config(text='Loaded.')
         except Exception as e:
@@ -1150,7 +1248,7 @@ class ScriptBuilderDialog(tk.Toplevel):
         setup      = m.get('setup', '')
         class_name = self._to_class_name(name)
         cal_name   = self._to_cal_name(name)
-        has_crop        = bool(m.get('crop'))
+        has_corners     = bool(m.get('corners', True))
         has_target_color = any(s.get('type') == 'detect' and s.get('method') == 'target_color'
                                for s in self._steps)
         has_fixed_detect = any(s.get('type') == 'detect' and s.get('fixed', False)
@@ -1163,7 +1261,9 @@ class ScriptBuilderDialog(tk.Toplevel):
                               for s in self._steps)
         has_pixel_count = any(s.get('type') == 'detect' and s.get('method') == 'pixel_count'
                               for s in self._steps)
-        has_cal         = has_cal_detect or has_crop   # needs calibration file infrastructure
+        has_cal         = False             # no JSON cal file — region asked once per run, stored in memory
+        has_random_wait = any(s.get('type') == 'random_wait' for s in self._steps)
+        has_ldr         = any(s.get('type') == 'ldr'         for s in self._steps)
 
         L = []   # output lines
 
@@ -1178,6 +1278,8 @@ class ScriptBuilderDialog(tk.Toplevel):
         # ── Imports ──────────────────────────────────────────────────────────
         if has_cal:
             L += ['import json', 'import os', 'import sys']
+        if has_random_wait:
+            L += ['import random']
         L += ['import time', '', 'from scripts.base_script import BaseScript', '', '']
 
         # ── Class header ─────────────────────────────────────────────────────
@@ -1207,6 +1309,12 @@ class ScriptBuilderDialog(tk.Toplevel):
                 info['cname'] = f'{cmd.replace("press_", "").upper()}_{step_num}_DELAY'
             elif t == 'wait':
                 info['cname'] = f'WAIT_{step_num}_DELAY'
+            elif t == 'random_wait':
+                info['cname_min'] = f'RANDOM_{step_num}_MIN'
+                info['cname_max'] = f'RANDOM_{step_num}_MAX'
+            elif t == 'ldr':
+                info['ldr_n']    = f'LDR_{step_num}'
+                info['ldr_mode'] = s.get('mode', 'below')
             elif t == 'detect':
                 detect_count += 1
                 info['detect_n'] = detect_count
@@ -1225,6 +1333,21 @@ class ScriptBuilderDialog(tk.Toplevel):
                 const_lines.append(f"    {info['cname']} = {s.get('delay', 0.0):.2f}{note}")
             elif t == 'wait':
                 const_lines.append(f"    {info['cname']} = {s.get('delay', 1.0):.2f}{note}")
+            elif t == 'random_wait':
+                const_lines += [
+                    f"    {info['cname_min']} = {s.get('min', 0.5):.2f}   # random delay range{note}",
+                    f"    {info['cname_max']} = {s.get('max', 2.0):.2f}",
+                ]
+            elif t == 'ldr':
+                px = info['ldr_n']
+                direction = 'below' if info['ldr_mode'] == 'below' else 'above'
+                const_lines += [
+                    f'    {px}_THRESHOLD = {s.get("threshold", 500)}'
+                    f'   # LDR trigger: {direction} this value{note}',
+                    f'    {px}_WINDOW    = {s.get("window", 10.0):.1f}'
+                    f'   # max seconds to wait for trigger',
+                    f'    {px}_INTERVAL  = {s.get("interval", 0.1):.2f}',
+                ]
             elif t == 'detect':
                 px  = info['px']
                 mth = info.get('method', 'avg_rgb')
@@ -1256,6 +1379,14 @@ class ScriptBuilderDialog(tk.Toplevel):
                         f'    {px}_BASELINE = {bl}  # R, G, B at time of script build',
                     ]
 
+        if has_corners and has_detect:
+            const_lines += [
+                '',
+                '    # ── Video panel dimensions (must match VideoPanel constants) ─────────',
+                '    _PANEL_W = 640',
+                '    _PANEL_H = 480',
+            ]
+
         # ── Step-body generator (shared by flat loop and block methods) ───────
         def gen_steps(s_list, info_list, indent, stop_stmt):
             lines = []
@@ -1279,6 +1410,27 @@ class ScriptBuilderDialog(tk.Toplevel):
                         f"{indent}if not self.wait(self.{info['cname']}, stop_event): {stop_stmt}",
                         '',
                     ]
+                elif t == 'random_wait':
+                    lines += [
+                        f'{indent}# Step {step}: Random Wait{note}',
+                        f"{indent}if not self.wait(random.uniform(self.{info['cname_min']}, self.{info['cname_max']}), stop_event): {stop_stmt}",
+                        '',
+                    ]
+                elif t == 'ldr':
+                    px   = info['ldr_n']
+                    mode = repr(info['ldr_mode'])
+                    lines += [
+                        f'{indent}# Step {step}: LDR — wait until {"below" if info["ldr_mode"] == "below" else "above"} threshold{note}',
+                        f'{indent}result = self._poll_ldr(',
+                        f'{indent}    controller, stop_event, {mode}, self.{px}_THRESHOLD,',
+                        f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                        f'{indent}if stop_event.is_set(): {stop_stmt}',
+                        f'{indent}if result is None:',
+                        f"{indent}    log('LDR timeout — no trigger within window.')",
+                        f'{indent}    {stop_stmt}',
+                        f"{indent}log(f'LDR triggered at {{result}}')",
+                        '',
+                    ]
                 elif t == 'detect':
                     px       = info['px']
                     mth      = info.get('method', 'avg_rgb')
@@ -1296,49 +1448,82 @@ class ScriptBuilderDialog(tk.Toplevel):
                         lines.append(f'{indent}tol = self.{px}_TOLERANCE')
                     else:
                         # Cal-mode: ask user once, save to cal file
+                        _cal_args = ('request_calibration, frame_grabber, stop_event, warp_info'
+                                     if has_corners else
+                                     'request_calibration, frame_grabber, stop_event')
                         lines += [
-                            f'{indent}if not self._cal or "region" not in self._cal:',
-                            f'{indent}    self._do_calibrate(request_calibration, frame_grabber, stop_event)',
+                            f'{indent}if self._detect_cal is None:',
+                            f'{indent}    self._do_calibrate({_cal_args})',
                             f'{indent}    if stop_event.is_set(): {stop_stmt}',
-                            f"{indent}x, y, w, h = self._cal['region']",
+                            f"{indent}x, y, w, h = self._detect_cal['region']",
                         ]
                         if mth == 'target_color':
                             lines += [f'{indent}tr, tg, tb = self.{px}_TARGET']
                         else:
-                            lines += [f"{indent}br, bg_c, bb = self._cal['baseline']"]
+                            lines += [f"{indent}br, bg_c, bb = self._detect_cal['baseline']"]
                         lines.append(
-                            f"{indent}tol = self._cal.get('tolerance', self.{px}_TOLERANCE)"
+                            f"{indent}tol = self._detect_cal.get('tolerance', self.{px}_TOLERANCE)"
                             if mth != 'target_color' else
                             f'{indent}tol = self.{px}_TOLERANCE'
                         )
 
                     # ── Show overlay box while polling ─────────────────────
-                    lines.append(f'{indent}frame_grabber.set_detect_overlay(x, y, w, h)')
+                    if has_corners:
+                        lines.append(f'{indent}frame_grabber.set_detect_overlay('
+                                     f'*self._warp_to_canvas((x, y, w, h), warp_info))')
+                    else:
+                        lines.append(f'{indent}frame_grabber.set_detect_overlay(x, y, w, h)')
 
                     # ── Poll call ──────────────────────────────────────────
                     if mth == 'target_color':
-                        lines += [
-                            f'{indent}result = self._poll_target_color(',
-                            f'{indent}    frame_grabber, stop_event,',
-                            f'{indent}    x, y, w, h, tr, tg, tb, tol,',
-                            f'{indent}    self.{px}_PX_THRESHOLD,',
-                            f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
-                        ]
+                        if has_corners:
+                            lines += [
+                                f'{indent}result = self._poll_target_color(',
+                                f'{indent}    frame_grabber, stop_event, warp_info,',
+                                f'{indent}    x, y, w, h, tr, tg, tb, tol,',
+                                f'{indent}    self.{px}_PX_THRESHOLD,',
+                                f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                            ]
+                        else:
+                            lines += [
+                                f'{indent}result = self._poll_target_color(',
+                                f'{indent}    frame_grabber, stop_event,',
+                                f'{indent}    x, y, w, h, tr, tg, tb, tol,',
+                                f'{indent}    self.{px}_PX_THRESHOLD,',
+                                f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                            ]
                     elif mth == 'pixel_count':
-                        lines += [
-                            f'{indent}result = self._poll_pixel_count(',
-                            f'{indent}    frame_grabber, stop_event,',
-                            f'{indent}    x, y, w, h, br, bg_c, bb, tol,',
-                            f'{indent}    self.{px}_PX_THRESHOLD,',
-                            f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
-                        ]
+                        if has_corners:
+                            lines += [
+                                f'{indent}result = self._poll_pixel_count(',
+                                f'{indent}    frame_grabber, stop_event, warp_info,',
+                                f'{indent}    x, y, w, h, br, bg_c, bb, tol,',
+                                f'{indent}    self.{px}_PX_THRESHOLD,',
+                                f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                            ]
+                        else:
+                            lines += [
+                                f'{indent}result = self._poll_pixel_count(',
+                                f'{indent}    frame_grabber, stop_event,',
+                                f'{indent}    x, y, w, h, br, bg_c, bb, tol,',
+                                f'{indent}    self.{px}_PX_THRESHOLD,',
+                                f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                            ]
                     else:
-                        lines += [
-                            f'{indent}result = self._poll_region(',
-                            f'{indent}    frame_grabber, stop_event,',
-                            f'{indent}    x, y, w, h, br, bg_c, bb, tol,',
-                            f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
-                        ]
+                        if has_corners:
+                            lines += [
+                                f'{indent}result = self._poll_region(',
+                                f'{indent}    frame_grabber, stop_event, warp_info,',
+                                f'{indent}    x, y, w, h, br, bg_c, bb, tol,',
+                                f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                            ]
+                        else:
+                            lines += [
+                                f'{indent}result = self._poll_region(',
+                                f'{indent}    frame_grabber, stop_event,',
+                                f'{indent}    x, y, w, h, br, bg_c, bb, tol,',
+                                f'{indent}    self.{px}_WINDOW, self.{px}_INTERVAL, log)',
+                            ]
 
                     # ── Clear overlay, check result ────────────────────────
                     lines += [
@@ -1399,7 +1584,12 @@ class ScriptBuilderDialog(tk.Toplevel):
                 block_method_names.append(mn)
 
             # run() loop calls each block method
-            sig = 'controller, frame_grabber, stop_event, log, request_calibration'
+            if has_corners:
+                sig      = 'controller, frame_grabber, stop_event, log, request_calibration, warp_info'
+                sig_def  = 'controller, frame_grabber, stop_event, log, request_calibration, warp_info'
+            else:
+                sig      = 'controller, frame_grabber, stop_event, log, request_calibration'
+                sig_def  = 'controller, frame_grabber, stop_event, log, request_calibration'
             run_loop_lines = [
                 f'            if not self.{mn}({sig}): break'
                 for mn in block_method_names
@@ -1413,7 +1603,7 @@ class ScriptBuilderDialog(tk.Toplevel):
             for (bname, bsteps, binfos), mn in zip(blocks_parsed, block_method_names):
                 block_method_lines += [
                     '',
-                    f'    def {mn}(self, controller, frame_grabber, stop_event, log, request_calibration):',
+                    f'    def {mn}(self, {sig_def}):',
                     f'        """Block: {bname}"""',
                 ]
                 body = gen_steps(bsteps, binfos, indent='        ', stop_stmt='return False')
@@ -1434,11 +1624,11 @@ class ScriptBuilderDialog(tk.Toplevel):
         L += const_lines
         L += ['']
 
-        if has_cal:
+        if has_cal_detect:
             L += [
                 '    def __init__(self):',
                 '        super().__init__()',
-                '        self._cal = None',
+                '        self._detect_cal = None',
                 '',
             ]
 
@@ -1446,22 +1636,20 @@ class ScriptBuilderDialog(tk.Toplevel):
             '    def run(self, controller, frame_grabber, stop_event, log, request_calibration):',
             "        log('Script started.')",
         ]
-        if has_cal:
-            L.append('        self._load_cal()')
-        if has_crop:
+        if has_cal_detect:
+            L.append('        self._detect_cal = None  # reset region each run — asked on first cycle')
+        if has_corners:
             L += [
                 '',
-                '        # ── Screen crop (ask once; saved to cal file for subsequent runs) ──────',
-                "        if not self._cal or 'crop' not in self._cal:",
-                "            crop = request_calibration('Draw a rectangle around the game screen to crop the view.')",
-                '            if stop_event.is_set():',
-                '                return',
-                '            if self._cal is None:',
-                '                self._cal = {}',
-                "            self._cal['crop'] = list(crop)",
-                '            self._save_cal()',
-                "        frame_grabber.set_crop(*self._cal['crop'])",
-                "        log('Screen crop applied.')",
+                '        # ── 4-corner screen calibration (every run) ───────────────────────',
+                f"        log('Click the four corners of the {console} screen in any order.')",
+                '        warp_info = request_calibration(',
+                f"            'Click the 4 corners of the {console} screen', mode='corners'",
+                '        )',
+                '        if stop_event.is_set() or warp_info is None:',
+                "            log('Script stopped.')",
+                '            return',
+                "        log(f'Screen calibrated ({warp_info[\"out_w\"]}×{warp_info[\"out_h\"]} px).')",
             ]
         L += [
             '        count = 0',
@@ -1469,8 +1657,6 @@ class ScriptBuilderDialog(tk.Toplevel):
             '        while not stop_event.is_set():',
         ]
         L += run_loop_lines
-        if has_crop:
-            L += ['', '        frame_grabber.clear_crop()']
         L += ['', "        log('Script stopped.')"]
 
         L += block_method_lines
@@ -1499,119 +1685,299 @@ class ScriptBuilderDialog(tk.Toplevel):
                 '            json.dump(self._cal, f)',
             ]
         if has_cal_detect:
-            L += [
-                '',
-                '    def _do_calibrate(self, request_calibration, frame_grabber, stop_event):',
-                '        """Called the first time the detect step is reached."""',
-                '        region = request_calibration(',
-                '            "Draw a box around the area to watch for changes.")',
-                '        if stop_event.is_set():',
-                '            return',
-                '        x, y, w, h = region',
-                '        frame = frame_grabber.get_latest_frame()',
-                '        if frame is None:',
-                '            return',
-                '        r, g, b = self.avg_rgb(frame, x, y, w, h)',
-                "        if self._cal is None:",
-                "            self._cal = {}",
-                "        self._cal.update({'region': [x, y, w, h], 'baseline': [r, g, b], 'tolerance': 25})",
-                '        self._save_cal()',
-            ]
+            if has_corners:
+                L += [
+                    '',
+                    '    def _do_calibrate(self, request_calibration, frame_grabber, stop_event, warp_info):',
+                    '        """Called the first time the detect step is reached."""',
+                    '        canvas_rect = request_calibration(',
+                    '            "Draw a box around the area to watch for changes.")',
+                    '        if stop_event.is_set():',
+                    '            return',
+                    '        x, y, w, h = self._canvas_to_warp(canvas_rect, warp_info)',
+                    '        frame = frame_grabber.get_latest_frame()',
+                    '        if frame is None:',
+                    '            return',
+                    '        frame = self.warp_frame(frame, warp_info)',
+                    '        r, g, b = self.avg_rgb(frame, x, y, w, h)',
+                    "        self._detect_cal = {'region': [x, y, w, h], 'baseline': [r, g, b], 'tolerance': 25}",
+                ]
+            else:
+                L += [
+                    '',
+                    '    def _do_calibrate(self, request_calibration, frame_grabber, stop_event):',
+                    '        """Called the first time the detect step is reached."""',
+                    '        region = request_calibration(',
+                    '            "Draw a box around the area to watch for changes.")',
+                    '        if stop_event.is_set():',
+                    '            return',
+                    '        x, y, w, h = region',
+                    '        frame = frame_grabber.get_latest_frame()',
+                    '        if frame is None:',
+                    '            return',
+                    '        r, g, b = self.avg_rgb(frame, x, y, w, h)',
+                    "        self._detect_cal = {'region': [x, y, w, h], 'baseline': [r, g, b], 'tolerance': 25}",
+                ]
         if has_avg_rgb:
-            L += [
-                '',
-                '    def _poll_region(self, frame_grabber, stop_event,',
-                '                     x, y, w, h, br, bg_c, bb, tolerance, window, interval, log=None):',
-                '        """Avg RGB detection — fires when the region average shifts by > tolerance."""',
-                '        deadline = time.time() + window',
-                '        next_log = time.time() + 2.0',
-                '        while time.time() < deadline:',
-                '            if stop_event.is_set():',
-                '                return None',
-                '            frame = frame_grabber.get_latest_frame()',
-                '            if frame is not None:',
-                '                r, g, b = self.avg_rgb(frame, x, y, w, h)',
-                '                if log and time.time() >= next_log:',
-                '                    log(f\'Watching... avg RGB=({r:.1f}, {g:.1f}, {b:.1f})  \'',
-                '                        f\'Δ=({abs(r-br):.1f}, {abs(g-bg_c):.1f}, {abs(b-bb):.1f})  tolerance={tolerance}\')',
-                '                    next_log = time.time() + 2.0',
-                '                if (abs(r-br) > tolerance or abs(g-bg_c) > tolerance',
-                '                        or abs(b-bb) > tolerance):',
-                '                    time.sleep(interval * 2)',
-                '                    frame2 = frame_grabber.get_latest_frame()',
-                '                    if frame2 is not None:',
-                '                        r2, g2, b2 = self.avg_rgb(frame2, x, y, w, h)',
-                '                        if (abs(r2-br) > tolerance or abs(g2-bg_c) > tolerance',
-                '                                or abs(b2-bb) > tolerance):',
-                '                            return (r2, g2, b2)',
-                '            time.sleep(interval)',
-                '        return None',
-            ]
+            if has_corners:
+                L += [
+                    '',
+                    '    def _poll_region(self, frame_grabber, stop_event, warp_info,',
+                    '                     x, y, w, h, br, bg_c, bb, tolerance, window, interval, log=None):',
+                    '        """Avg RGB detection — fires when the region average shifts by > tolerance."""',
+                    '        deadline = time.time() + window',
+                    '        next_log = time.time() + 2.0',
+                    '        while time.time() < deadline:',
+                    '            if stop_event.is_set():',
+                    '                return None',
+                    '            frame = frame_grabber.get_latest_frame()',
+                    '            if frame is not None:',
+                    '                frame = self.warp_frame(frame, warp_info)',
+                    '                r, g, b = self.avg_rgb(frame, x, y, w, h)',
+                    '                if log and time.time() >= next_log:',
+                    '                    log(f\'Watching... avg RGB=({r:.1f}, {g:.1f}, {b:.1f})  \'',
+                    '                        f\'Δ=({abs(r-br):.1f}, {abs(g-bg_c):.1f}, {abs(b-bb):.1f})  tolerance={tolerance}\')',
+                    '                    next_log = time.time() + 2.0',
+                    '                if (abs(r-br) > tolerance or abs(g-bg_c) > tolerance',
+                    '                        or abs(b-bb) > tolerance):',
+                    '                    time.sleep(interval * 2)',
+                    '                    frame2 = frame_grabber.get_latest_frame()',
+                    '                    if frame2 is not None:',
+                    '                        frame2 = self.warp_frame(frame2, warp_info)',
+                    '                        r2, g2, b2 = self.avg_rgb(frame2, x, y, w, h)',
+                    '                        if (abs(r2-br) > tolerance or abs(g2-bg_c) > tolerance',
+                    '                                or abs(b2-bb) > tolerance):',
+                    '                            return (r2, g2, b2)',
+                    '            time.sleep(interval)',
+                    '        return None',
+                ]
+            else:
+                L += [
+                    '',
+                    '    def _poll_region(self, frame_grabber, stop_event,',
+                    '                     x, y, w, h, br, bg_c, bb, tolerance, window, interval, log=None):',
+                    '        """Avg RGB detection — fires when the region average shifts by > tolerance."""',
+                    '        deadline = time.time() + window',
+                    '        next_log = time.time() + 2.0',
+                    '        while time.time() < deadline:',
+                    '            if stop_event.is_set():',
+                    '                return None',
+                    '            frame = frame_grabber.get_latest_frame()',
+                    '            if frame is not None:',
+                    '                r, g, b = self.avg_rgb(frame, x, y, w, h)',
+                    '                if log and time.time() >= next_log:',
+                    '                    log(f\'Watching... avg RGB=({r:.1f}, {g:.1f}, {b:.1f})  \'',
+                    '                        f\'Δ=({abs(r-br):.1f}, {abs(g-bg_c):.1f}, {abs(b-bb):.1f})  tolerance={tolerance}\')',
+                    '                    next_log = time.time() + 2.0',
+                    '                if (abs(r-br) > tolerance or abs(g-bg_c) > tolerance',
+                    '                        or abs(b-bb) > tolerance):',
+                    '                    time.sleep(interval * 2)',
+                    '                    frame2 = frame_grabber.get_latest_frame()',
+                    '                    if frame2 is not None:',
+                    '                        r2, g2, b2 = self.avg_rgb(frame2, x, y, w, h)',
+                    '                        if (abs(r2-br) > tolerance or abs(g2-bg_c) > tolerance',
+                    '                                or abs(b2-bb) > tolerance):',
+                    '                            return (r2, g2, b2)',
+                    '            time.sleep(interval)',
+                    '        return None',
+                ]
         if has_pixel_count:
+            if has_corners:
+                L += [
+                    '',
+                    '    def _poll_pixel_count(self, frame_grabber, stop_event, warp_info,',
+                    '                          x, y, w, h, br, bg_c, bb, tolerance,',
+                    '                          px_threshold, window, interval, log=None):',
+                    '        """Pixel count detection — fires when >= px_threshold pixels deviate',
+                    '        from the baseline by more than tolerance (per channel).',
+                    '        More sensitive than avg_rgb for localised events like a shiny sparkle.',
+                    '        """',
+                    '        deadline = time.time() + window',
+                    '        next_log = time.time() + 2.0',
+                    '        while time.time() < deadline:',
+                    '            if stop_event.is_set():',
+                    '                return None',
+                    '            frame = frame_grabber.get_latest_frame()',
+                    '            if frame is not None:',
+                    '                frame = self.warp_frame(frame, warp_info)',
+                    '                n = self.count_matching_pixels(',
+                    '                    frame, x, y, w, h, br, bg_c, bb, tolerance)',
+                    '                if log and time.time() >= next_log:',
+                    '                    log(f\'Watching... {n} px changed  (threshold: {px_threshold}  tolerance: {tolerance})\')',
+                    '                    next_log = time.time() + 2.0',
+                    '                if n >= px_threshold:',
+                    '                    time.sleep(interval * 2)',
+                    '                    frame2 = frame_grabber.get_latest_frame()',
+                    '                    if frame2 is not None:',
+                    '                        frame2 = self.warp_frame(frame2, warp_info)',
+                    '                        n2 = self.count_matching_pixels(',
+                    '                            frame2, x, y, w, h, br, bg_c, bb, tolerance)',
+                    '                        if n2 >= px_threshold:',
+                    '                            return n2',
+                    '            time.sleep(interval)',
+                    '        return None',
+                ]
+            else:
+                L += [
+                    '',
+                    '    def _poll_pixel_count(self, frame_grabber, stop_event,',
+                    '                          x, y, w, h, br, bg_c, bb, tolerance,',
+                    '                          px_threshold, window, interval, log=None):',
+                    '        """Pixel count detection — fires when >= px_threshold pixels deviate',
+                    '        from the baseline by more than tolerance (per channel).',
+                    '        More sensitive than avg_rgb for localised events like a shiny sparkle.',
+                    '        """',
+                    '        deadline = time.time() + window',
+                    '        next_log = time.time() + 2.0',
+                    '        while time.time() < deadline:',
+                    '            if stop_event.is_set():',
+                    '                return None',
+                    '            frame = frame_grabber.get_latest_frame()',
+                    '            if frame is not None:',
+                    '                n = self.count_matching_pixels(',
+                    '                    frame, x, y, w, h, br, bg_c, bb, tolerance)',
+                    '                if log and time.time() >= next_log:',
+                    '                    log(f\'Watching... {n} px changed  (threshold: {px_threshold}  tolerance: {tolerance})\')',
+                    '                    next_log = time.time() + 2.0',
+                    '                if n >= px_threshold:',
+                    '                    time.sleep(interval * 2)',
+                    '                    frame2 = frame_grabber.get_latest_frame()',
+                    '                    if frame2 is not None:',
+                    '                        n2 = self.count_matching_pixels(',
+                    '                            frame2, x, y, w, h, br, bg_c, bb, tolerance)',
+                    '                        if n2 >= px_threshold:',
+                    '                            return n2',
+                    '            time.sleep(interval)',
+                    '        return None',
+                ]
+        if has_target_color:
+            if has_corners:
+                L += [
+                    '',
+                    '    def _poll_target_color(self, frame_grabber, stop_event, warp_info,',
+                    '                          x, y, w, h, tr, tg, tb, tolerance,',
+                    '                          px_threshold, window, interval, log=None):',
+                    '        """Target colour detection — fires when >= px_threshold pixels',
+                    '        match the target colour (tr, tg, tb) within tolerance.',
+                    '        Use for detecting a specific sparkle/highlight colour.',
+                    '        """',
+                    '        deadline = time.time() + window',
+                    '        next_log = time.time() + 2.0',
+                    '        while time.time() < deadline:',
+                    '            if stop_event.is_set():',
+                    '                return None',
+                    '            frame = frame_grabber.get_latest_frame()',
+                    '            if frame is not None:',
+                    '                frame = self.warp_frame(frame, warp_info)',
+                    '                n = self.count_target_pixels(',
+                    '                    frame, x, y, w, h, tr, tg, tb, tolerance)',
+                    '                if log and time.time() >= next_log:',
+                    '                    log(f\'Watching... {n} px match target  (threshold: {px_threshold}  tolerance: {tolerance})\')',
+                    '                    next_log = time.time() + 2.0',
+                    '                if n >= px_threshold:',
+                    '                    time.sleep(interval * 2)',
+                    '                    frame2 = frame_grabber.get_latest_frame()',
+                    '                    if frame2 is not None:',
+                    '                        frame2 = self.warp_frame(frame2, warp_info)',
+                    '                        n2 = self.count_target_pixels(',
+                    '                            frame2, x, y, w, h, tr, tg, tb, tolerance)',
+                    '                        if n2 >= px_threshold:',
+                    '                            return n2',
+                    '            time.sleep(interval)',
+                    '        return None',
+                ]
+            else:
+                L += [
+                    '',
+                    '    def _poll_target_color(self, frame_grabber, stop_event,',
+                    '                          x, y, w, h, tr, tg, tb, tolerance,',
+                    '                          px_threshold, window, interval, log=None):',
+                    '        """Target colour detection — fires when >= px_threshold pixels',
+                    '        match the target colour (tr, tg, tb) within tolerance.',
+                    '        Use for detecting a specific sparkle/highlight colour.',
+                    '        """',
+                    '        deadline = time.time() + window',
+                    '        next_log = time.time() + 2.0',
+                    '        while time.time() < deadline:',
+                    '            if stop_event.is_set():',
+                    '                return None',
+                    '            frame = frame_grabber.get_latest_frame()',
+                    '            if frame is not None:',
+                    '                n = self.count_target_pixels(',
+                    '                    frame, x, y, w, h, tr, tg, tb, tolerance)',
+                    '                if log and time.time() >= next_log:',
+                    '                    log(f\'Watching... {n} px match target  (threshold: {px_threshold}  tolerance: {tolerance})\')',
+                    '                    next_log = time.time() + 2.0',
+                    '                if n >= px_threshold:',
+                    '                    time.sleep(interval * 2)',
+                    '                    frame2 = frame_grabber.get_latest_frame()',
+                    '                    if frame2 is not None:',
+                    '                        n2 = self.count_target_pixels(',
+                    '                            frame2, x, y, w, h, tr, tg, tb, tolerance)',
+                    '                        if n2 >= px_threshold:',
+                    '                            return n2',
+                    '            time.sleep(interval)',
+                    '        return None',
+                ]
+
+        if has_ldr:
             L += [
                 '',
-                '    def _poll_pixel_count(self, frame_grabber, stop_event,',
-                '                          x, y, w, h, br, bg_c, bb, tolerance,',
-                '                          px_threshold, window, interval, log=None):',
-                '        """Pixel count detection — fires when >= px_threshold pixels deviate',
-                '        from the baseline by more than tolerance (per channel).',
-                '        More sensitive than avg_rgb for localised events like a shiny sparkle.',
+                '    def _poll_ldr(self, controller, stop_event, mode, threshold,',
+                '                  window, interval, log=None):',
+                '        """LDR light-sensor detection.',
+                '        mode=\'below\': fires when sensor < threshold (screen darkens).',
+                '        mode=\'above\': fires when sensor > threshold (screen brightens).',
+                '        Returns the sensor value that triggered, or None on timeout.',
                 '        """',
                 '        deadline = time.time() + window',
                 '        next_log = time.time() + 2.0',
+                '        direction = f\'< {threshold}\' if mode == \'below\' else f\'> {threshold}\'',
                 '        while time.time() < deadline:',
                 '            if stop_event.is_set():',
                 '                return None',
-                '            frame = frame_grabber.get_latest_frame()',
-                '            if frame is not None:',
-                '                n = self.count_matching_pixels(',
-                '                    frame, x, y, w, h, br, bg_c, bb, tolerance)',
-                '                if log and time.time() >= next_log:',
-                '                    log(f\'Watching... {n} px changed  (threshold: {px_threshold}  tolerance: {tolerance})\')',
-                '                    next_log = time.time() + 2.0',
-                '                if n >= px_threshold:',
-                '                    time.sleep(interval * 2)',
-                '                    frame2 = frame_grabber.get_latest_frame()',
-                '                    if frame2 is not None:',
-                '                        n2 = self.count_matching_pixels(',
-                '                            frame2, x, y, w, h, br, bg_c, bb, tolerance)',
-                '                        if n2 >= px_threshold:',
-                '                            return n2',
+                '            val = controller.read_light()',
+                '            if log and time.time() >= next_log:',
+                "                log(f'LDR: {val}  (waiting for {direction})')",
+                '                next_log = time.time() + 2.0',
+                '            if mode == \'below\' and val < threshold:',
+                '                return val',
+                '            if mode == \'above\' and val > threshold:',
+                '                return val',
                 '            time.sleep(interval)',
                 '        return None',
             ]
-        if has_target_color:
+
+        if has_corners and has_detect:
             L += [
                 '',
-                '    def _poll_target_color(self, frame_grabber, stop_event,',
-                '                          x, y, w, h, tr, tg, tb, tolerance,',
-                '                          px_threshold, window, interval, log=None):',
-                '        """Target colour detection — fires when >= px_threshold pixels',
-                '        match the target colour (tr, tg, tb) within tolerance.',
-                '        Use for detecting a specific sparkle/highlight colour.',
-                '        """',
-                '        deadline = time.time() + window',
-                '        next_log = time.time() + 2.0',
-                '        while time.time() < deadline:',
-                '            if stop_event.is_set():',
-                '                return None',
-                '            frame = frame_grabber.get_latest_frame()',
-                '            if frame is not None:',
-                '                n = self.count_target_pixels(',
-                '                    frame, x, y, w, h, tr, tg, tb, tolerance)',
-                '                if log and time.time() >= next_log:',
-                '                    log(f\'Watching... {n} px match target  (threshold: {px_threshold}  tolerance: {tolerance})\')',
-                '                    next_log = time.time() + 2.0',
-                '                if n >= px_threshold:',
-                '                    time.sleep(interval * 2)',
-                '                    frame2 = frame_grabber.get_latest_frame()',
-                '                    if frame2 is not None:',
-                '                        n2 = self.count_target_pixels(',
-                '                            frame2, x, y, w, h, tr, tg, tb, tolerance)',
-                '                        if n2 >= px_threshold:',
-                '                            return n2',
-                '            time.sleep(interval)',
-                '        return None',
+                '    # ── Coordinate conversion helpers ─────────────────────────────────────',
+                '',
+                '    def _canvas_to_warp(self, canvas_rect, warp_info):',
+                '        """Convert a rectangle in canvas pixels to warped-frame pixels."""',
+                '        cx, cy, cw, ch = canvas_rect',
+                '        scale = min(self._PANEL_W / warp_info[\'out_w\'],',
+                '                    self._PANEL_H / warp_info[\'out_h\'])',
+                '        x_off = (self._PANEL_W - warp_info[\'out_w\'] * scale) / 2',
+                '        y_off = (self._PANEL_H - warp_info[\'out_h\'] * scale) / 2',
+                '        x = max(0, int((cx - x_off) / scale))',
+                '        y = max(0, int((cy - y_off) / scale))',
+                '        w = max(1, int(cw / scale))',
+                '        h = max(1, int(ch / scale))',
+                '        return x, y, w, h',
+                '',
+                '    def _warp_to_canvas(self, warp_rect, warp_info):',
+                '        """Convert a rectangle in warped-frame pixels to canvas pixels."""',
+                '        x, y, w, h = warp_rect',
+                '        scale = min(self._PANEL_W / warp_info[\'out_w\'],',
+                '                    self._PANEL_H / warp_info[\'out_h\'])',
+                '        x_off = (self._PANEL_W - warp_info[\'out_w\'] * scale) / 2',
+                '        y_off = (self._PANEL_H - warp_info[\'out_h\'] * scale) / 2',
+                '        cx = int(x * scale + x_off)',
+                '        cy = int(y * scale + y_off)',
+                '        cw = max(1, int(w * scale))',
+                '        ch = max(1, int(h * scale))',
+                '        return cx, cy, cw, ch',
             ]
 
         return '\n'.join(L) + '\n'
@@ -1645,7 +2011,7 @@ class ScriptBuilderDialog(tk.Toplevel):
         class_name = self._to_class_name(name)
         filename   = self._to_filename(name)
         cal_name   = self._to_cal_name(name)
-        has_crop         = bool(m.get('crop'))
+        has_corners      = bool(m.get('corners', True))
         has_fixed_detect = any(s.get('type') == 'detect' and     s.get('fixed', False) for s in self._steps)
         has_cal_detect   = any(s.get('type') == 'detect' and not s.get('fixed', False) for s in self._steps)
         has_detect       = has_fixed_detect or has_cal_detect
@@ -1653,7 +2019,7 @@ class ScriptBuilderDialog(tk.Toplevel):
                                for s in self._steps)
         has_pixel_count  = any(s.get('type') == 'detect' and s.get('method') == 'pixel_count'
                                for s in self._steps)
-        has_cal          = has_cal_detect or has_crop
+        has_cal          = False  # no JSON cal file — region is in-memory only
 
         file_path = f'scripts/{filename}'
 
@@ -1661,10 +2027,8 @@ class ScriptBuilderDialog(tk.Toplevel):
         spec_lines = [f'Console: {console}']
         if setup:
             spec_lines.append(f'Setup:   {setup}')
-        if has_crop:
-            cr = m['crop']
-            spec_lines.append(f'Crop:    x={cr[0]} y={cr[1]} w={cr[2]} h={cr[3]}  '
-                               f'(save/restore from cal file — ask user only on first run)')
+        if has_corners:
+            spec_lines.append('Corners: True  (script prompts user to click 4 screen corners every run)')
         spec_lines.append('')
         spec_lines.append('LOOP STEPS:')
 
@@ -1677,6 +2041,9 @@ class ScriptBuilderDialog(tk.Toplevel):
             elif t == 'wait':
                 spec_lines.append(
                     f'  {i:3d}. [Wait      ]  duration={s.get("delay",0):.2f}s{note}')
+            elif t == 'random_wait':
+                spec_lines.append(
+                    f'  {i:3d}. [RandomWait]  min={s.get("min",0.5):.2f}s  max={s.get("max",2.0):.2f}s{note}')
             elif t == 'detect':
                 r      = s.get('region') or [0, 0, 0, 0]
                 bl     = s.get('baseline') or [0, 0, 0]
@@ -1770,36 +2137,33 @@ result = self._poll_pixel_count(frame_grabber, stop_event,
 ```
 ''' if has_pixel_count else ''
 
-        # When crop is active the region coords change every run, so always ask.
-        _cal_guard = ('# Crop is active — always ask user to draw region (coords change each run)\n'
-                      if has_crop else
-                      '# No crop — only ask once; saved region reused on subsequent runs\n'
-                      'if not self._cal or "region" not in self._cal:\n    ')
-        _cal_indent = ('' if has_crop else '    ')
+        _cal_guard = ('# Ask on first cycle of each run (in-memory — reset when script restarts)\n'
+                      'if self._detect_cal is None:\n    ')
+        _cal_indent = '    '
 
         _avg_rgb_cal_usage = f'''
-Pattern for using calibration inside the loop (Avg RGB DETECT step):
+Pattern for using detection region inside the loop (Avg RGB DETECT step):
 ```python
 # Inside run(), inside the while loop, at the DETECT step (method=avg_rgb):
 {_cal_guard}{_cal_indent}self._do_calibrate(request_calibration, frame_grabber, stop_event)
 {_cal_indent}if stop_event.is_set(): break
-x, y, w, h = self._cal['region']
-br, bg_c, bb = self._cal['baseline']
-tol = self._cal.get('tolerance', self.DETECT_N_TOLERANCE)
+x, y, w, h = self._detect_cal['region']
+br, bg_c, bb = self._detect_cal['baseline']
+tol = self._detect_cal.get('tolerance', self.DETECT_N_TOLERANCE)
 result = self._poll_region(frame_grabber, stop_event,
                            x, y, w, h, br, bg_c, bb, tol, WINDOW, INTERVAL)
 ```
 ''' if has_avg_rgb and has_cal_detect else ''
 
         _px_count_cal_usage = f'''
-Pattern for using calibration inside the loop (Pixel Count DETECT step):
+Pattern for using detection region inside the loop (Pixel Count DETECT step):
 ```python
 # Inside run(), inside the while loop, at the DETECT step (method=pixel_count):
 {_cal_guard}{_cal_indent}self._do_calibrate(request_calibration, frame_grabber, stop_event)
 {_cal_indent}if stop_event.is_set(): break
-x, y, w, h = self._cal['region']
-br, bg_c, bb = self._cal['baseline']
-tol = self._cal.get('tolerance', self.DETECT_N_TOLERANCE)
+x, y, w, h = self._detect_cal['region']
+br, bg_c, bb = self._detect_cal['baseline']
+tol = self._detect_cal.get('tolerance', self.DETECT_N_TOLERANCE)
 result = self._poll_pixel_count(frame_grabber, stop_event,
                                 x, y, w, h, br, bg_c, bb, tol,
                                 self.DETECT_N_PX_THRESHOLD, WINDOW, INTERVAL)
@@ -1807,35 +2171,25 @@ result = self._poll_pixel_count(frame_grabber, stop_event,
 ''' if has_pixel_count and has_cal_detect else ''
 
         cal_section = f'''
-## Calibration infrastructure (required — this spec includes DETECT steps)
+## Detection region infrastructure (required — this spec includes non-fixed DETECT steps)
 
-{'Cal-mode DETECT steps: user draws region once at runtime; saved to JSON.' if has_cal_detect else ''}
+{'Non-fixed DETECT steps: user draws region on first cycle of each run (in-memory, not saved to file).' if has_cal_detect else ''}
 {'Fixed DETECT steps: region/baseline are class constants — no user input needed.' if has_fixed_detect else ''}
 
 IMPORTANT: You MUST include every helper method that is called (_poll_region,
 _poll_pixel_count, _do_calibrate, etc.) as actual indented methods inside the class body.
+Use self._detect_cal (NOT self._cal) — it is an instance dict reset at the start of run().
 
 ```python
-import json, os, sys, time
+import time
 
-def _cal_path(self):
-    base = (os.path.dirname(sys.executable) if getattr(sys, 'frozen', False)
-            else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    cal_dir = os.path.join(base, 'calibration')
-    os.makedirs(cal_dir, exist_ok=True)
-    return os.path.join(cal_dir, '{cal_name}')
+# In __init__:
+self._detect_cal = None
 
-def _load_cal(self):
-    try:
-        with open(self._cal_path(), 'r') as f:
-            self._cal = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        self._cal = None
+# At top of run(), before the loop — reset region each run:
+self._detect_cal = None
 
-def _save_cal(self):
-    with open(self._cal_path(), 'w') as f:
-        json.dump(self._cal, f)
-{'# _do_calibrate needed for cal-mode DETECT steps:' if has_cal_detect else '# No _do_calibrate needed (all DETECT steps are fixed).'}
+{'# _do_calibrate — stores region in memory only (not saved to file):' if has_cal_detect else ''}
 {'def _do_calibrate(self, request_calibration, frame_grabber, stop_event):' if has_cal_detect else ''}
 {'    region = request_calibration("Draw a box around the area to watch for changes.")' if has_cal_detect else ''}
 {'    if stop_event.is_set(): return' if has_cal_detect else ''}
@@ -1843,11 +2197,9 @@ def _save_cal(self):
 {'    frame = frame_grabber.get_latest_frame()' if has_cal_detect else ''}
 {'    if frame is None: return' if has_cal_detect else ''}
 {'    r, g, b = self.avg_rgb(frame, x, y, w, h)' if has_cal_detect else ''}
-{'    if self._cal is None: self._cal = dict()' if has_cal_detect else ''}
-{'    self._cal.update({{"region": [x, y, w, h], "baseline": [r, g, b], "tolerance": 25}})' if has_cal_detect else ''}
-{'    self._save_cal()' if has_cal_detect else ''}
+{'    self._detect_cal = {{"region": [x, y, w, h], "baseline": [r, g, b], "tolerance": 25}}' if has_cal_detect else ''}
 ```
-{_avg_rgb_cal_usage}{_px_count_cal_usage}{_poll_region_snippet}{_poll_pixel_snippet}''' if has_cal else ''
+{_avg_rgb_cal_usage}{_px_count_cal_usage}{_poll_region_snippet}{_poll_pixel_snippet}''' if has_cal_detect else ''
 
         prompt = f'''\
 Please generate a complete GamePRo Python automation script from the spec at the \
@@ -1961,7 +2313,7 @@ Generate a complete, working Python script with these requirements:
 
 4. The main while-loop must follow the step sequence exactly, in order.
 
-5. {'Include _load_cal / _save_cal / _cal_path methods.  Call _load_cal() once at the top of run().' + (' Before the loop: check if self._cal has a "crop" key; if not, call request_calibration() to ask user, save to self._cal["crop"] and call _save_cal().  Then call frame_grabber.set_crop(*self._cal["crop"]).  After the loop: frame_grabber.clear_crop().' if has_crop else '') + (' For fixed=True DETECT steps: read region/baseline directly from the DETECT_N_REGION / DETECT_N_BASELINE class constants — no user setup needed.' if has_fixed_detect else '') + (' For fixed=False DETECT steps: call _do_calibrate() lazily inside the loop at the DETECT step, only if self._cal has no region key.  Use the polling pattern matching method= (avg_rgb → _poll_region, pixel_count → _poll_pixel_count).' if has_cal_detect else '') if has_cal else 'No calibration or detect steps — no cal infrastructure needed.'}
+5. {('Include _load_cal / _save_cal / _cal_path methods.  Call _load_cal() once at the top of run().' + (' For fixed=True DETECT steps: read region/baseline directly from the DETECT_N_REGION / DETECT_N_BASELINE class constants — no user setup needed.' if has_fixed_detect else '') + (' For fixed=False DETECT steps: call _do_calibrate() lazily inside the loop at the DETECT step, only if self._cal has no region key.  Use the polling pattern matching method= (avg_rgb → _poll_region, pixel_count → _poll_pixel_count).' if has_cal_detect else '')) if has_cal else 'No calibration or detect steps — no cal infrastructure needed.'}
 
 6. After EVERY wait() call check:  if not self.wait(...): break
    Also check stop_event.is_set() immediately after any detect step.
@@ -2473,4 +2825,271 @@ class DetectionCompareDialog(tk.Toplevel):
         self._on_close()
 
     def _on_close(self):
+        self.destroy()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LDR Test Dialog
+# ══════════════════════════════════════════════════════════════════════════════
+
+class LdrTestDialog(tk.Toplevel):
+    """
+    Real-time LDR (light-sensor) test window.
+    Samples controller.read_light() at ~100 ms intervals, plots the values
+    on a scrolling canvas graph and lets the user drag a threshold line to
+    set the trigger value, then apply it back to the step.
+    """
+
+    GRAPH_W  = 600
+    GRAPH_H  = 220
+    INTERVAL = 0.10   # seconds between samples
+    MAX_PTS  = 300     # keep last N samples visible
+
+    def __init__(self, parent, controller, initial_threshold: int, on_apply=None):
+        super().__init__(parent)
+        self.title('LDR Sensor Test')
+        self.configure(bg=BG)
+        self.resizable(False, False)
+        self.transient(parent)
+
+        self._controller  = controller
+        self._on_apply    = on_apply
+        self._threshold   = initial_threshold
+
+        self._samples: list[int] = []
+        self._running   = False
+        self._thread    = None
+        self._dragging  = False
+
+        self._thr_var   = tk.IntVar(value=initial_threshold)
+
+        self._build()
+        self._draw_graph()
+
+        self.protocol('WM_DELETE_WINDOW', self._on_close)
+        self.grab_set()
+
+    # ── UI construction ────────────────────────────────────────────────────
+
+    def _build(self):
+        pad = dict(padx=6, pady=4)
+
+        # ── Title bar ──
+        tk.Label(self, text='LDR Sensor Test', bg=BG,
+                 fg=FG, font=('Segoe UI', 12, 'bold')).pack(pady=(10, 2))
+        tk.Label(self, text='Sample the light sensor and drag the line to set a threshold.',
+                 bg=BG, fg=FG2, font=('Segoe UI', 9)).pack(pady=(0, 6))
+
+        # ── Graph canvas ──
+        self._canvas = tk.Canvas(
+            self, width=self.GRAPH_W, height=self.GRAPH_H,
+            bg='#0a0a1a', highlightthickness=1, highlightbackground=BG3)
+        self._canvas.pack(padx=10, pady=(0, 4))
+        self._canvas.bind('<ButtonPress-1>',   self._on_drag_start)
+        self._canvas.bind('<B1-Motion>',       self._on_drag_move)
+        self._canvas.bind('<ButtonRelease-1>', self._on_drag_end)
+
+        # ── Stats bar ──
+        stats_fr = tk.Frame(self, bg=BG2)
+        stats_fr.pack(fill='x', padx=10, pady=(0, 4))
+
+        self._cur_lbl = tk.Label(stats_fr, text='Current: —', bg=BG2, fg=FG,
+                                 font=('Consolas', 10), width=16, anchor='w')
+        self._cur_lbl.pack(side='left', **pad)
+
+        self._min_lbl = tk.Label(stats_fr, text='Min: —', bg=BG2, fg='#88ccff',
+                                 font=('Consolas', 10), width=12, anchor='w')
+        self._min_lbl.pack(side='left', **pad)
+
+        self._max_lbl = tk.Label(stats_fr, text='Max: —', bg=BG2, fg='#ffcc44',
+                                 font=('Consolas', 10), width=12, anchor='w')
+        self._max_lbl.pack(side='left', **pad)
+
+        self._mid_lbl = tk.Label(stats_fr, text='Mid: —', bg=BG2, fg='#aaffaa',
+                                 font=('Consolas', 10), width=14, anchor='w')
+        self._mid_lbl.pack(side='left', **pad)
+
+        # ── Threshold row ──
+        thr_fr = tk.Frame(self, bg=BG)
+        thr_fr.pack(fill='x', padx=10, pady=(0, 6))
+
+        tk.Label(thr_fr, text='Threshold:', bg=BG, fg=FG,
+                 font=('Segoe UI', 9)).pack(side='left', padx=(0, 4))
+
+        tk.Spinbox(thr_fr, from_=0, to=1020, textvariable=self._thr_var,
+                   width=6, bg=BG2, fg=FG, insertbackground=FG,
+                   command=self._on_thr_spinbox).pack(side='left')
+
+        tk.Label(thr_fr, text='(drag red line on graph)',
+                 bg=BG, fg=FG2, font=('Segoe UI', 8)).pack(side='left', padx=(8, 0))
+
+        # ── Suggest midpoint button ──
+        self._suggest_btn = tk.Button(
+            thr_fr, text='↕ Suggest Midpoint', bg=BG3, fg=FG,
+            relief='flat', font=('Segoe UI', 8),
+            command=self._suggest_midpoint)
+        self._suggest_btn.pack(side='right', padx=(0, 0))
+
+        # ── Control buttons ──
+        btn_fr = tk.Frame(self, bg=BG)
+        btn_fr.pack(pady=(0, 10))
+
+        self._start_btn = tk.Button(
+            btn_fr, text='▶ Start', width=10, bg='#1a5500', fg=FG,
+            relief='flat', font=('Segoe UI', 9, 'bold'),
+            command=self._start)
+        self._start_btn.pack(side='left', padx=4)
+
+        self._stop_btn = tk.Button(
+            btn_fr, text='■ Stop', width=10, bg=BG3, fg=FG,
+            relief='flat', font=('Segoe UI', 9),
+            state='disabled', command=self._stop)
+        self._stop_btn.pack(side='left', padx=4)
+
+        self._apply_btn = tk.Button(
+            btn_fr, text='✔ Apply to Step', width=14, bg=ACCENT, fg=FG,
+            relief='flat', font=('Segoe UI', 9, 'bold'),
+            command=self._apply)
+        self._apply_btn.pack(side='left', padx=4)
+
+        tk.Button(btn_fr, text='Close', width=8, bg=BG3, fg=FG,
+                  relief='flat', font=('Segoe UI', 9),
+                  command=self._on_close).pack(side='left', padx=4)
+
+    # ── Sampling thread ────────────────────────────────────────────────────
+
+    def _start(self):
+        if self._running or self._controller is None:
+            return
+        self._running = True
+        self._start_btn.config(state='disabled')
+        self._stop_btn.config(state='normal')
+        self._thread = threading.Thread(target=self._sample_loop, daemon=True)
+        self._thread.start()
+
+    def _stop(self):
+        self._running = False
+        self._start_btn.config(state='normal')
+        self._stop_btn.config(state='disabled')
+
+    def _sample_loop(self):
+        while self._running:
+            try:
+                val = self._controller.read_light()
+            except Exception:
+                val = 0
+            self._samples.append(int(val))
+            if len(self._samples) > self.MAX_PTS:
+                self._samples = self._samples[-self.MAX_PTS:]
+            # schedule UI update on main thread
+            try:
+                self.after(0, self._refresh_ui)
+            except Exception:
+                break
+            time.sleep(self.INTERVAL)
+
+    # ── Graph drawing ──────────────────────────────────────────────────────
+
+    def _refresh_ui(self):
+        self._draw_graph()
+        self._update_stats()
+
+    def _draw_graph(self):
+        c = self._canvas
+        c.delete('all')
+        w, h = self.GRAPH_W, self.GRAPH_H
+        PAD_L, PAD_R, PAD_T, PAD_B = 40, 10, 10, 20
+
+        gw = w - PAD_L - PAD_R
+        gh = h - PAD_T - PAD_B
+
+        # Background grid lines (horizontal at 0, 255, 510, 765, 1020)
+        for raw_v in range(0, 1021, 255):
+            gy = PAD_T + gh - int(raw_v / 1020 * gh)
+            c.create_line(PAD_L, gy, w - PAD_R, gy, fill='#1e2e5a', dash=(3, 4))
+            c.create_text(PAD_L - 4, gy, text=str(raw_v), fill='#445588',
+                          font=('Consolas', 7), anchor='e')
+
+        # Axis
+        c.create_line(PAD_L, PAD_T, PAD_L, h - PAD_B, fill='#334477')
+        c.create_line(PAD_L, h - PAD_B, w - PAD_R, h - PAD_B, fill='#334477')
+
+        # Plot samples
+        pts = self._samples
+        if len(pts) >= 2:
+            xs = [PAD_L + int(i / max(len(pts) - 1, 1) * gw) for i in range(len(pts))]
+            ys = [PAD_T + gh - int(v / 1020 * gh) for v in pts]
+            for i in range(len(pts) - 1):
+                c.create_line(xs[i], ys[i], xs[i+1], ys[i+1],
+                               fill='#44aaff', width=1)
+            # Current value dot
+            c.create_oval(xs[-1]-3, ys[-1]-3, xs[-1]+3, ys[-1]+3,
+                          fill='#ffffff', outline='')
+
+        # Threshold line
+        thr = max(0, min(1020, self._thr_var.get()))
+        ty = PAD_T + gh - int(thr / 1020 * gh)
+        c.create_line(PAD_L, ty, w - PAD_R, ty, fill='#ff4444', width=2)
+        c.create_text(w - PAD_R - 2, ty - 6, text=f'{thr}',
+                      fill='#ff8888', font=('Consolas', 8), anchor='e')
+
+        # Store graph geometry for drag conversion
+        self._graph_geom = (PAD_L, PAD_T, gw, gh)
+
+    def _update_stats(self):
+        pts = self._samples
+        if not pts:
+            return
+        cur = pts[-1]
+        mn  = min(pts)
+        mx  = max(pts)
+        mid = (mn + mx) // 2
+        self._cur_lbl.config(text=f'Current: {cur}')
+        self._min_lbl.config(text=f'Min: {mn}')
+        self._max_lbl.config(text=f'Max: {mx}')
+        self._mid_lbl.config(text=f'Mid: {mid}')
+
+    # ── Threshold drag ─────────────────────────────────────────────────────
+
+    def _y_to_ldr(self, y):
+        if not hasattr(self, '_graph_geom'):
+            return self._thr_var.get()
+        PAD_L, PAD_T, gw, gh = self._graph_geom
+        raw = (PAD_T + gh - y) / gh * 1020
+        return max(0, min(1020, int(raw)))
+
+    def _on_drag_start(self, event):
+        self._dragging = True
+        self._set_threshold(self._y_to_ldr(event.y))
+
+    def _on_drag_move(self, event):
+        if self._dragging:
+            self._set_threshold(self._y_to_ldr(event.y))
+
+    def _on_drag_end(self, event):
+        self._dragging = False
+
+    def _set_threshold(self, value: int):
+        self._thr_var.set(value)
+        self._draw_graph()
+
+    def _on_thr_spinbox(self):
+        self._draw_graph()
+
+    def _suggest_midpoint(self):
+        pts = self._samples
+        if not pts:
+            return
+        mid = (min(pts) + max(pts)) // 2
+        self._set_threshold(mid)
+
+    # ── Apply & Close ──────────────────────────────────────────────────────
+
+    def _apply(self):
+        thr = max(0, min(1020, self._thr_var.get()))
+        if self._on_apply:
+            self._on_apply(thr)
+
+    def _on_close(self):
+        self._running = False
         self.destroy()
