@@ -1967,7 +1967,7 @@ class ScriptBuilderDialog(tk.Toplevel):
                 '',
                 '    def _frame_to_warp(self, frame_rect, warp_info):',
                 '        """Convert a rectangle in full-frame pixels to warped-frame pixels."""',
-                '        import numpy as np',
+                '        import cv2, numpy as np',
                 '        fx, fy, fw, fh = frame_rect',
                 '        corners = np.array([[fx, fy], [fx+fw, fy],',
                 '                            [fx+fw, fy+fh], [fx, fy+fh]],',
