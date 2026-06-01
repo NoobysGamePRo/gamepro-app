@@ -39,6 +39,11 @@ class GameProController:
         self._lock = threading.Lock()
         self._ldr_display_callback = None   # set by app to update the LDR dial
 
+        # Direction-wait mechanism — used by scripts that need a D-pad press from the user
+        self._waiting_for_direction = False
+        self._direction_event       = threading.Event()
+        self._direction_value       = None
+
     # ── Button commands ──────────────────────────────────────────────────────
 
     def press_a(self):      self._send('a')
@@ -156,6 +161,31 @@ class GameProController:
             return False
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def wait_for_direction(self, stop_event, timeout: float = 60.0) -> 'Optional[str]':
+        """Block the calling thread until the user presses a D-pad button via the
+        Manual Controls panel, or until stop_event is set / timeout expires.
+        Returns 'up', 'down', 'left', 'right', or None."""
+        self._direction_value = None
+        self._direction_event.clear()
+        self._waiting_for_direction = True
+        try:
+            steps = max(1, int(timeout / 0.1))
+            for _ in range(steps):
+                if stop_event.is_set():
+                    return None
+                if self._direction_event.wait(timeout=0.1):
+                    return self._direction_value
+            return None
+        finally:
+            self._waiting_for_direction = False
+
+    def set_direction_input(self, direction: str):
+        """Called by the app when the user presses a D-pad button during a
+        direction-wait.  direction is one of 'up', 'down', 'left', 'right'."""
+        self._direction_value = direction
+        self._direction_event.set()
+        self._waiting_for_direction = False
 
     def fire(self, char: str):
         """

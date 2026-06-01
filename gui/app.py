@@ -148,6 +148,8 @@ class GameProApp(tk.Tk):
 
         self._update_banner: Optional[tk.Frame] = None
 
+        self._direction_wait_active = False   # True while D-pad is temporarily re-enabled
+
         # Manual control worker — single thread, latest-only queue (size 1)
         self._manual_queue: queue.Queue = queue.Queue(maxsize=1)
         self._manual_worker_thread = threading.Thread(
@@ -737,13 +739,36 @@ class GameProApp(tk.Tk):
             if not self._controller or not self._controller.is_open():
                 continue
             try:
-                char = _MANUAL_CHARS.get(action_name)
-                if char:
-                    self._controller.fire(char)
+                # Route direction presses to the script if it's waiting for one
+                _dir_map = {'press_up': 'up', 'press_down': 'down',
+                            'press_left': 'left', 'press_right': 'right'}
+                if (self._controller._waiting_for_direction
+                        and action_name in _dir_map):
+                    self._controller.set_direction_input(_dir_map[action_name])
                 else:
-                    getattr(self._controller, action_name)()
+                    char = _MANUAL_CHARS.get(action_name)
+                    if char:
+                        self._controller.fire(char)
+                    else:
+                        getattr(self._controller, action_name)()
             except Exception as e:
                 self.after(0, lambda err=e: self._log(f'Control error: {err}'))
+
+    def _poll_direction_wait(self):
+        """Runs on the main thread while a script is active. Temporarily re-enables
+        the D-pad buttons when the script is waiting for a direction input."""
+        if not (self._script_thread and self._script_thread.is_alive()):
+            return   # script ended — stop polling
+        if self._controller and self._controller._waiting_for_direction:
+            if not self._direction_wait_active:
+                self._direction_wait_active = True
+                self._set_manual_controls_state('normal')
+                self._log('► Press a direction button (↑ ↓ ← →) in the Manual Controls panel.')
+        else:
+            if self._direction_wait_active:
+                self._direction_wait_active = False
+                self._set_manual_controls_state('disabled')
+        self.after(100, self._poll_direction_wait)
 
     def _draw_light_dial(self, value: int):
         """Draw a semicircular dial showing value (0–1020)."""
@@ -1406,6 +1431,8 @@ class GameProApp(tk.Tk):
 
         self._script_thread = threading.Thread(target=thread_target, daemon=True)
         self._script_thread.start()
+        self._direction_wait_active = False
+        self.after(100, self._poll_direction_wait)
 
     def _stop_script(self):
         self._stop_event.set()
@@ -1415,8 +1442,10 @@ class GameProApp(tk.Tk):
     def _on_script_done(self):
         self._run_btn.config(state='normal')
         self._stop_btn.config(state='disabled')
+        self._direction_wait_active = False
         if self._controller:
             self._controller._ldr_display_callback = None
+            self._controller._waiting_for_direction = False
         if self._grabber:
             self._grabber.clear_crop()
         self._video_panel.clear_warp()
