@@ -191,7 +191,7 @@ class CalibrationDialog(tk.Toplevel):
 
         self._pin_note_lbl = tk.Label(
             pin_col,
-            text='Requires firmware v4.6+',
+            text='Upgrade firmware to enable pin assignments',
             bg=BG, fg='#556688', font=('Arial', 7))
         self._pin_note_lbl.grid(row=1, column=0, columnspan=2,
                                  sticky='w', pady=(0, 6))
@@ -282,9 +282,9 @@ class CalibrationDialog(tk.Toplevel):
                 pin_values  = values[_NUM_FIELDS:] if n == _NUM_FIELDS_FULL else None
                 self.after(0, lambda v=cal_values: self._populate(v))
                 self.after(0, lambda pv=pin_values: self._populate_pins(pv))
-                msg = ('Calibration loaded (firmware v4.6+ — pin assignments unlocked).'
+                msg = ('Calibration loaded — pin assignments unlocked.'
                        if pin_values is not None
-                       else 'Calibration loaded (firmware v4.5 — upgrade to v4.6+ to edit pins).')
+                       else 'Calibration loaded — upgrade firmware to edit pin assignments.')
                 self.after(0, lambda: self._log(msg))
             except Exception as e:
                 self.after(0, lambda: self._log(f'Calibration read error: {e}'))
@@ -313,7 +313,7 @@ class CalibrationDialog(tk.Toplevel):
             for sb in self._pin_spinboxes:
                 sb.config(state='disabled')
             self._pin_note_lbl.config(
-                text='Requires firmware v4.6+',
+                text='Upgrade firmware to enable pin assignments',
                 fg='#556688')
             self._pins_enabled = False
 

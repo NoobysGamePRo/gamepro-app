@@ -79,7 +79,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.6'
+APP_VERSION     = 'v1.7'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
@@ -989,43 +989,52 @@ class GameProApp(tk.Tk):
             self.after(0, lambda: self._port_dot.config(fg='#666666'))
             self.after(0, lambda: self._set_manual_controls_state('disabled'))
 
+        import time as _time
+        _time.sleep(0.5)   # give Windows time to release the port before avrdude opens it
+
         self.after(0, lambda: self._log(f'Flashing to {port}...'))
 
-        cmd = [
-            avrdude_exe,
-            '-C', avrdude_conf,
-            '-p', 'atmega328p',
-            '-c', 'arduino',
-            '-P', port,
-            '-b', '115200',
-            '-U', f'flash:w:{hex_path}:i',
-        ]
+        # Try 115200 baud first (new bootloader), fall back to 57600 (old bootloader)
+        for baud in ('115200', '57600'):
+            cmd = [
+                avrdude_exe,
+                '-C', avrdude_conf,
+                '-p', 'atmega328p',
+                '-c', 'arduino',
+                '-P', port,
+                '-b', baud,
+                '-U', f'flash:w:{hex_path}:i',
+            ]
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            except subprocess.TimeoutExpired:
+                if baud == '115200':
+                    self.after(0, lambda: self._log(
+                        '115200 baud timed out — retrying at 57600 (old bootloader)...'))
+                    continue
+                self.after(0, lambda: self._log('Flash timed out — check the connection.'))
+                return
 
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except subprocess.TimeoutExpired:
-            self.after(0, lambda: self._log('Flash timed out — check the connection.'))
-            return
+            # avrdude writes most output to stderr; merge both streams
+            raw = result.stderr + result.stdout
+            for line in re.split(r'[\r\n]+', raw):
+                line = line.strip()
+                if line:
+                    self.after(0, lambda l=line: self._log(l))
 
-        # avrdude writes most output to stderr; merge both streams
-        raw = result.stderr + result.stdout
-        for line in re.split(r'[\r\n]+', raw):
-            line = line.strip()
-            if line:
-                self.after(0, lambda l=line: self._log(l))
-
-        if result.returncode == 0:
-            self.after(0, lambda: self._log('Firmware updated successfully!'))
-        else:
-            self.after(0, lambda: self._log(
-                f'Flash failed (avrdude exit code {result.returncode}).'))
-            return
+            if result.returncode == 0:
+                self.after(0, lambda: self._log('Firmware updated successfully!'))
+                return
+            else:
+                self.after(0, lambda: self._log(
+                    f'Flash failed (avrdude exit code {result.returncode}).'))
+                return
 
         # Reconnect serial after a short pause for the Arduino to reboot
         self.after(1500, self._on_port_selected)
