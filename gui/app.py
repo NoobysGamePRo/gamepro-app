@@ -990,7 +990,7 @@ class GameProApp(tk.Tk):
             self.after(0, lambda: self._set_manual_controls_state('disabled'))
 
         import time as _time
-        _time.sleep(0.5)   # give Windows time to release the port before avrdude opens it
+        _time.sleep(1.5)   # give Windows time to release the port before avrdude opens it
 
         self.after(0, lambda: self._log(f'Flashing to {port}...'))
 

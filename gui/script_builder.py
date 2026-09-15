@@ -86,11 +86,49 @@ class ScriptBuilderDialog(tk.Toplevel):
         self._build()
         self._update_video()
 
+        # Pin the window to a fixed size sized to fit the TALLEST step-editor
+        # state (all optional rows shown at once). Without this, the window
+        # auto-resizes to whatever's currently visible — it visibly jumps
+        # bigger/smaller as different step types are selected during testing
+        # (status label text length changes), and the fixed-size step list
+        # panel (pack_propagate(False), width=300) clips widgets like
+        # "Apply Changes" off the bottom when a taller step (e.g. random
+        # wait) is edited in a window sized for a shorter one.
+        self._rw_row.pack(fill='x', pady=1, before=self._note_row)
+        self._ldr_row.pack(fill='x', pady=1, before=self._note_row)
+        self._ldr_test_btn.pack(pady=(2, 0), anchor='w', before=self._note_row)
+        self._px_threshold_row.pack(fill='x', pady=1, before=self._region_lbl)
+        self._target_color_row.pack(fill='x', pady=1, before=self._region_lbl)
+
+        # left.pack_propagate(False) (set in _build, so its fixed 300px
+        # width holds) also freezes what LEFT reports as its own required
+        # size, at whatever tiny value it had before its children were
+        # even added — so the toplevel's natural reqheight (driven by the
+        # left/right side-by-side max) silently ignores how tall LEFT's
+        # content actually needs to be. Re-enable propagation briefly to
+        # read the real number, then restore the fixed width/no-propagate
+        # behaviour.
+        self._left_panel.pack_propagate(True)
+        self.update_idletasks()
+        needed_left_h = self._left_panel.winfo_reqheight()
+        self._left_panel.pack_propagate(False)
+        self._left_panel.config(width=300)
+
+        self.update_idletasks()
+        w = self.winfo_reqwidth()
+        h = max(self.winfo_reqheight(),
+                self._meta_bar.winfo_reqheight() + needed_left_h)
+        self._rw_row.pack_forget()
+        self._ldr_row.pack_forget()
+        self._ldr_test_btn.pack_forget()
+        self._px_threshold_row.pack_forget()
+        self._target_color_row.pack_forget()
+
         # Centre over parent
         self.update_idletasks()
-        pw = parent.winfo_x() + (parent.winfo_width()  - self.winfo_width())  // 2
-        ph = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f'+{pw}+{ph}')
+        pw = parent.winfo_x() + (parent.winfo_width()  - w) // 2
+        ph = parent.winfo_y() + (parent.winfo_height() - h) // 2
+        self.geometry(f'{w}x{h}+{pw}+{ph}')
         self.protocol('WM_DELETE_WINDOW', self._on_builder_close)
 
     # ── Build UI ───────────────────────────────────────────────────────────────
@@ -99,6 +137,7 @@ class ScriptBuilderDialog(tk.Toplevel):
         # ── Metadata row ──────────────────────────────────────────────────────
         meta = tk.Frame(self, bg=BG2, padx=8, pady=6)
         meta.pack(fill='x')
+        self._meta_bar = meta
 
         tk.Label(meta, text='Console:', bg=BG2, fg=FG2,
                  font=('Arial', 9)).pack(side='left')
@@ -113,6 +152,7 @@ class ScriptBuilderDialog(tk.Toplevel):
         # Left: step list + editor (300px)
         left = tk.Frame(main, bg=BG, width=300)
         left.pack(side='left', fill='y')
+        self._left_panel = left
         left.pack_propagate(False)
 
         # Step list header
@@ -475,6 +515,13 @@ class ScriptBuilderDialog(tk.Toplevel):
             self._recording = False
             if self._timer_id:
                 self.after_cancel(self._timer_id)
+            # Capture the trailing delay between the last button press and
+            # stopping — previously left at 0.0, which lost the pause the
+            # user left for the next detect/wait step to be inserted.
+            if self._steps and self._steps[-1].get('type') == 'button':
+                trailing = round(time.time() - self._last_click_time, 2)
+                self._steps[-1]['delay'] = trailing
+                self._refresh_list()
             self._rec_btn.config(text='▶  Start Recording', bg='#1a5500')
             self._status_lbl.config(
                 text=f'Recording stopped.  {len(self._steps)} steps recorded.')
