@@ -43,8 +43,10 @@ from PIL import Image, ImageTk
 from core.controller import GameProController
 from core.camera import FrameGrabber
 from gui.calibration_dialog import CalibrationDialog
+from gui.settings_dialog import SettingsDialog
 from gui.script_builder import ScriptBuilderDialog
-from gui.video_panel import VideoPanel
+from gui.video_panel import VideoPanel, PANEL_W, PANEL_H
+from gui.readme_viewer import ReadmeViewer, readme_path
 from scripts.base_script import BaseScript
 
 # ── Manual command chars (action name → Arduino byte) ─────────────────────────
@@ -70,6 +72,8 @@ FG2      = '#aabbdd'   # Muted blue-white (labels, headings)
 # It should point to the ZIP download of the main branch.
 # Example: https://github.com/noobysgamepro/gamepro-scripts/archive/refs/heads/main.zip
 SCRIPTS_REPO_ZIP = "https://github.com/NoobysGamePRo/gamepro-scripts/archive/refs/heads/main.zip"
+# Files copied by Get Scripts: the scripts plus their readmes and readme images
+SCRIPT_FILE_TYPES = ('.py', '.md', '.png', '.jpg', '.jpeg', '.gif')
 
 # ── Firmware update URLs ──────────────────────────────────────────────────────
 # GitHub Releases API for each hardware variant.
@@ -79,7 +83,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.8'
+APP_VERSION     = 'v1.9'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
@@ -392,21 +396,35 @@ class GameProApp(tk.Tk):
         self._tree.configure(yscrollcommand=vsb.set)
         self._tree.pack(side='left', fill='both', expand=True)
         vsb.pack(side='right', fill='y')
+        self._tree.bind('<<TreeviewSelect>>', self._on_script_selected)
 
-        # Run / Stop buttons
+        # Overview of the selected script (its DESCRIPTION)
+        self._desc_label = tk.Label(left, text='', bg=BG, fg=FG2, font=('Arial', 9),
+                                    justify='left', anchor='w', wraplength=284)
+        self._desc_label.pack(fill='x', pady=(4, 0))
+
+        # Run / Readme / Stop buttons
         btn_row = tk.Frame(left, bg=BG)
         btn_row.pack(fill='x', pady=6)
 
-        self._run_btn = ttk.Button(btn_row, text='▶  Run Script',
+        self._run_btn = ttk.Button(btn_row, text='▶ Run Script',
                                     style='Run.TButton',
                                     command=self._run_script)
-        self._run_btn.pack(side='left', expand=True, fill='x', padx=(0, 4))
+        self._run_btn.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
 
-        self._stop_btn = ttk.Button(btn_row, text='■  Stop',
+        self._readme_btn = ttk.Button(btn_row, text='📖 Readme',
+                                       style='Refresh.TButton',
+                                       command=self._toggle_readme,
+                                       state='disabled', width=-9)
+        self._readme_btn.grid(row=0, column=1, sticky='nsew', padx=(0, 4))
+        ToolTip(self._readme_btn, 'Setup instructions for the selected script')
+
+        self._stop_btn = ttk.Button(btn_row, text='■ Stop',
                                      style='Stop.TButton',
                                      command=self._stop_script,
-                                     state='disabled')
-        self._stop_btn.pack(side='left', expand=True, fill='x')
+                                     state='disabled', width=-5)
+        self._stop_btn.grid(row=0, column=2, sticky='nsew')
+        btn_row.columnconfigure(0, weight=1)        # Run takes what Readme / Stop leave
 
         # Log
         tk.Label(left, text='Log', bg=BG, fg=FG2,
@@ -445,6 +463,10 @@ class GameProApp(tk.Tk):
         self._video_panel = VideoPanel(right)
         self._video_panel.pack()
         self._video_panel.set_overlay_callback(self._on_video_overlay)
+
+        # Readme: laid over the video area while open (Close brings the preview back)
+        self._readme = ReadmeViewer(right, PANEL_W + 4, PANEL_H + 4,
+                                    on_close=lambda: self._readme_btn.config(text='📖 Readme'))
 
         self._build_manual_controls(right)
 
@@ -1254,6 +1276,7 @@ class GameProApp(tk.Tk):
     def _populate_scripts(self):
         self._tree.delete(*self._tree.get_children())
         self._script_map = {}
+        self._script_paths = {}
         scripts_dir = self._get_scripts_dir()
         if os.path.isdir(scripts_dir):
             self._build_tree('', scripts_dir)
@@ -1294,7 +1317,7 @@ class GameProApp(tk.Tk):
 
                         added = updated = 0
                         for name in names:
-                            if not name.endswith('.py'):
+                            if not name.lower().endswith(SCRIPT_FILE_TYPES):
                                 continue
                             rel = name[len(root_prefix):]   # strip repo root
                             if not rel:
@@ -1363,6 +1386,9 @@ class GameProApp(tk.Tk):
                 iid = self._tree.insert(parent_iid, 'end',
                                          text=f'  \U0001f4c2  {label}', open=True)
                 self._build_tree(iid, entry.path)
+                if not self._tree.get_children(iid):
+                    # no scripts inside (e.g. a script's template / image folder) - hide it
+                    self._tree.delete(iid)
 
             elif entry.is_file() and entry.name.endswith('.py'):
                 script_cls = self._load_script(entry.path)
@@ -1370,6 +1396,7 @@ class GameProApp(tk.Tk):
                     iid = self._tree.insert(parent_iid, 'end',
                                              text=f'      {script_cls.NAME}')
                     self._script_map[iid] = script_cls
+                    self._script_paths[iid] = entry.path
 
     def _load_script(self, path: str):
         """Dynamically load a .py file and return its BaseScript subclass, or None."""
@@ -1386,6 +1413,40 @@ class GameProApp(tk.Tk):
         except Exception as e:
             self._log(f'Failed to load {os.path.basename(path)}: {e}')
         return None
+
+    # ── Description / Readme ──────────────────────────────────────────────────
+
+    def _selected_script(self):
+        sel = self._tree.selection()
+        return sel[0] if sel and sel[0] in self._script_map else None
+
+    def _on_script_selected(self, event=None):
+        iid = self._selected_script()
+        cls = self._script_map.get(iid)
+        self._desc_label.config(text=(getattr(cls, 'DESCRIPTION', '') or '') if cls else '')
+        has = bool(iid and readme_path(self._script_paths.get(iid)))
+        self._readme_btn.config(state='normal' if has else 'disabled')
+        if self._readme.is_open():
+            if has:
+                self._show_readme(iid)
+            else:
+                self._readme.close()
+
+    def _toggle_readme(self):
+        if self._readme.is_open():
+            self._readme.close()
+            return
+        iid = self._selected_script()
+        if iid:
+            self._show_readme(iid)
+
+    def _show_readme(self, iid):
+        path = readme_path(self._script_paths.get(iid))
+        if not path:
+            return
+        self._readme.place(in_=self._video_panel, x=-2, y=-2)
+        self._readme.show(path, self._script_map[iid].NAME)
+        self._readme_btn.config(text='📖 Close')
 
     # ── Run / Stop ────────────────────────────────────────────────────────────
 
@@ -1412,6 +1473,17 @@ class GameProApp(tk.Tk):
         script_cls = self._script_map[iid]
         script = script_cls()
 
+        # Optional per-script settings (class attribute SETTINGS) - ask before starting
+        if getattr(script_cls, 'SETTINGS', None):
+            dlg = SettingsDialog(self, script_cls)
+            self.wait_window(dlg)
+            if dlg.result is None:
+                self._log('Run cancelled.')
+                return
+            script.settings = dlg.result
+
+        if self._readme.is_open():
+            self._readme.close()          # the script may need clicks on the video
         self._stop_event.clear()
         self._run_btn.config(state='disabled')
         self._stop_btn.config(state='normal')

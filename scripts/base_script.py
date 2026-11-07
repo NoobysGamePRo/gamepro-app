@@ -4,8 +4,13 @@ BaseScript — abstract base class for all GamePRo automation scripts.
 To create a new script:
   1. Create a .py file anywhere inside the scripts/ folder (subfolders are fine).
   2. Define a class that inherits from BaseScript.
-  3. Set NAME (shown in the GUI) and optionally DESCRIPTION.
+  3. Set NAME (shown in the GUI) and optionally DESCRIPTION (a one-line overview, shown
+     under the script list when the script is selected).
   4. Implement the run() method.
+  5. Optional: SETTINGS (a settings window shown on Run - see gui/settings_dialog.py) and a
+     readme: a Markdown file next to the script with the same name (my_script.md), opened by
+     the Readme button over the video area. Images go in a folder starting with '_' (hidden
+     from the script list), e.g. ![Party](_readme_images/my_script/party.png).
 
 The GUI will discover your script automatically on next launch — no registration needed.
 
