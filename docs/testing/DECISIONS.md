@@ -3,6 +3,7 @@
 Newest first. Each entry: date, decision, why.
 
 ## 2026-11-11 (Carl's answers to the Phase 0 questions)
+- **Judge = Option B: no Claude API key.** The runner saves checkpoint frames and results overnight, and Claude Code judges them in a morning session on Carl's subscription. This avoids separate API billing while the specs are still being tuned. Option A (API key, fully unattended judging) can be added later without changing the runner.
 - **Promotion clean-up: `retired.json` + app v1.10** (gamepro-app PR #3). The list is generated from the scripts repo's git history: every path no longer published, with the sha256 of every published version. Get Scripts deletes a local file only if it matches one of those hashes. Content hashes were chosen over a plain old→new list because a customer's own edits must never be deleted. `moved_data` carries user data folders across.
 - **Not changed: `press_plus` already existed as hardware.** + is the HOME servo in the other direction, sent as `'W'` (`wonder_trade()`). The controller gained `press_plus()` / `press_home()` aliases.
 - **No Start button.** Start and Select are always pressed together (the soft-reset servo). `crystal_game_corner`'s `press_start()` is a Phase 1 fix.
