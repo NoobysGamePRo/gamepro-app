@@ -47,6 +47,7 @@ from gui.settings_dialog import SettingsDialog
 from gui.script_builder import ScriptBuilderDialog
 from gui.video_panel import VideoPanel, PANEL_W, PANEL_H
 from gui.readme_viewer import ReadmeViewer, readme_path
+from core.script_sync import apply_retired
 from scripts.base_script import BaseScript
 
 # ── Manual command chars (action name → Arduino byte) ─────────────────────────
@@ -83,7 +84,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.9'
+APP_VERSION     = 'v1.10'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
@@ -1351,9 +1352,26 @@ class GameProApp(tk.Tk):
                                 if not os.path.exists(init):
                                     open(init, 'w').close()
 
+                        # Remove old copies of scripts that were moved or renamed (and carry
+                        # their data folders across) - see core/script_sync.py
+                        removed = moved = kept = 0
+                        manifest_name = root_prefix + 'retired.json'
+                        if manifest_name in names:
+                            try:
+                                manifest = json.loads(zf.read(manifest_name).decode('utf-8'))
+                                removed, moved, kept = apply_retired(manifest, scripts_dir)
+                            except Exception as e:
+                                self.after(0, lambda e=e: self._log(f'Could not tidy old scripts: {e}'))
+
                 msg = (f'Scripts updated: {added} new, {updated} updated.'
                        if (added or updated)
                        else 'Already up to date — no changes.')
+                if removed or moved:
+                    msg += f'\nRemoved {removed} old copies of moved scripts'
+                    msg += f', kept your files ({moved} moved to the new folder).' if moved else '.'
+                if kept:
+                    msg += (f'\n{kept} old file(s) were left in place because they have been '
+                            'changed on this PC.')
                 self.after(0, lambda: self._log(msg))
                 self.after(0, self._populate_scripts)
 

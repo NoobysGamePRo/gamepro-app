@@ -65,6 +65,8 @@ class GameProController:
     def soft_reset(self):   self._send('S')
     def soft_reset_z(self): self._send('Z')
     def wonder_trade(self): self._send('W')
+    def press_plus(self):   self._send('W')   # Switch: + (same servo as HOME, other way)
+    def press_home(self):   self._send('S')   # Switch: HOME
 
     # ── Calibration backup / restore (firmware v4.5+ / Switch v1.2+) ──────────
 
