@@ -1,0 +1,17 @@
+script: "Beta/gen_9_scarlet_violet/sv_surprise_trade.py"
+name: "SV – Surprise Trade"
+game: "Scarlet / Violet (Nintendo Switch)"
+console: "Switch"
+draft: true
+kind: "online trade"
+start_state: "SV: Poke Portal reachable with Y, trade Pokemon in Box 1"
+cycles: 3
+timeout_minutes: 30
+cycle_log: "Trade\\s*\\#(\\d+)"
+max_static_seconds: 120
+checkpoints:
+  - name: "trade done"
+    when: "TODO: log line or minutes"
+    expect: "trade complete screen, then back at the trade menu"
+success: "Each trade completes and the next one starts from the same screen."
+notes: "Blind fixed waits; the C++ used the camera."

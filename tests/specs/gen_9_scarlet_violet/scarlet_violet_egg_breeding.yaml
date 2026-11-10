@@ -1,0 +1,22 @@
+script: "Beta/gen_9_scarlet_violet/scarlet_violet_egg_breeding.py"
+name: "Scarlet / Violet – Egg Breeding"
+game: "Scarlet / Violet (Nintendo Switch)"
+console: "Switch"
+draft: true
+kind: "breeding / hatching"
+start_state: "SV: in a picnic with two compatible Pokemon, facing the basket"
+cycles: 3
+timeout_minutes: 30
+cycle_log: "egg\\s*\\#(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "Draw rectangle over the picnic basket / egg notification area", rig_key: "TODO"}
+checkpoints:
+  - name: "hatch"
+    when: "TODO: log line or minutes"
+    expect: "the hatch animation or the hatchling summary screen"
+  - name: "end"
+    when: "TODO: log line or minutes"
+    expect: "party / box as the script expects"
+success: "Each cycle collects or hatches the expected eggs and checks every hatchling; the party/boxes end in the state the script expects."
+notes: "Collects eggs only (no shiny check). time.sleep(5) ignores Stop. BUG: egg check read the BGR frame as RGB (looked for cyan, never fired) - fixed in gamepro-scripts PR #3."

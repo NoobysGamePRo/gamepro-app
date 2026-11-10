@@ -1,0 +1,27 @@
+script: "Beta/gen_4_hgss_dpp/hgss_random_encounter.py"
+name: "HGSS – Random Encounter"
+game: "HeartGold / SoulSilver (DS / 3DS)"
+console: "3DS (DS mode)"
+draft: true
+kind: "wild encounters"
+start_state: "HGSS: saved in tall grass, healthy lead"
+cycles: 10
+timeout_minutes: 30
+cycle_log: "Encounter\\s*\\#(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "Draw region over the wild Pokemon's sprite", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "line 180: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "a wild Pokemon on the battle screen when the check runs"
+  - name: "after flee"
+    when: "TODO: log line or minutes"
+    expect: "back in the overworld at the same spot"
+success: "Every encounter is detected, judged not shiny and fled, then walking resumes in the same area. Different species must NOT be reported as shiny. Plus one proof that detection works."
+notes: "Colour baseline from the first wild Pokemon - a different species reads as shiny. C++ used light-sensor timing."
+# log lines that mean it found its target:
+#   *** SHINY DETECTED! R:{} G:{} B:{} ***
+#   Script paused — catch your shiny! Press ■ Stop when done.

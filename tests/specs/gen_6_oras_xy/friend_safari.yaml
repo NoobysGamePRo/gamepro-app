@@ -1,0 +1,24 @@
+script: "Beta/gen_6_oras_xy/friend_safari.py"
+name: "Gen 6 – Friend Safari Encounter"
+game: "X/Y"
+console: "3DS"
+draft: true
+kind: "wild encounters"
+start_state: "X/Y: saved in a Friend Safari's grass, light sensor on the bottom screen"
+cycles: 10
+timeout_minutes: 30
+cycle_log: "Encounter\\s*(\\d+)"
+max_static_seconds: 120
+interactive:            # a headless run must answer these
+  - "line 64: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "a wild Pokemon on the battle screen when the check runs"
+  - name: "after flee"
+    when: "TODO: log line or minutes"
+    expect: "back in the overworld at the same spot"
+success: "Every encounter is detected, judged not shiny and fled, then walking resumes in the same area. Different species must NOT be reported as shiny. Plus one proof that detection works."
+notes: "Flees with 10 B presses only - the C++ then pressed Left/Right/Left/Right/A to Run, so it never leaves the battle. 0.08 s per step is too short."
+# log lines that mean it found its target:
+#   *** SHINY on encounter {}! ***

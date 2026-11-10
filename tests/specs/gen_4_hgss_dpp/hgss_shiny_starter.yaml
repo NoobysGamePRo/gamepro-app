@@ -1,0 +1,27 @@
+script: "Beta/gen_4_hgss_dpp/hgss_shiny_starter.py"
+name: "HGSS Shiny Starter"
+game: "HGSS / DPPt (DS)"
+console: "3DS (DS mode)"
+draft: true
+kind: "soft-reset hunt"
+start_state: "HGSS: saved in Elm's lab before the starter choice"
+cycles: 5
+timeout_minutes: 30
+cycle_log: "Soft\\ reset\\s*\\#(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "<expr>", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "line 157: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "the target Pokemon on screen at the moment the shiny check runs"
+  - name: "after reset"
+    when: "TODO: log line or minutes"
+    expect: "the game back at the title / save point, ready for the next cycle"
+success: "Every cycle resets, reaches the encounter/gift and logs \"not shiny\" with the screen showing the expected Pokemon. Plus one proof that detection works: a shiny reference frame, or the check value moving clearly when the target is not on screen."
+notes: "Matches the C++ including the 3 starters / Left presses."
+# log lines that mean it found its target:
+#   Script paused — catch your shiny! Press ■ Stop when done.
+#   *** SHINY DETECTED! Starter {} — R:{} G:{} B:{}  (baseline R:{} G:{} B:{}) ***

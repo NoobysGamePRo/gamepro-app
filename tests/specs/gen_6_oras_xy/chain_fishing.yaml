@@ -1,0 +1,28 @@
+script: "Beta/gen_6_oras_xy/chain_fishing.py"
+name: "Gen 6 – Chain Fishing"
+game: "X/Y and ORAS"
+console: "3DS"
+draft: true
+kind: "wild encounters"
+start_state: "XY/ORAS: saved facing water with a rod in the Y menu, light sensor on the bottom screen"
+cycles: 10
+timeout_minutes: 30
+cycle_log: "Chain\\s*(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "Draw rectangle above trainer's head (exclamation mark)", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "waits for a D-pad press in Manual Controls (wait_for_direction)"
+  - "line 157: parks until Stop is pressed (stop_event.wait())"
+  - "asks the user to press Stop within a time window (baseline check)"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "a wild Pokemon on the battle screen when the check runs"
+  - name: "after flee"
+    when: "TODO: log line or minutes"
+    expect: "back in the overworld at the same spot"
+success: "Every encounter is detected, judged not shiny and fled, then walking resumes in the same area. Different species must NOT be reported as shiny. Plus one proof that detection works."
+notes: "Reworked June 2026 (light-sensor dark-phase timing, species independent). Interactive: a D-pad press picks the rod slot, and a 10 s window after the first encounter."
+# log lines that mean it found its target:
+#   *** SHINY detected on chain {}! {}s >= {}s — Catch it! ***

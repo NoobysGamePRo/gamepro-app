@@ -1,0 +1,17 @@
+script: "Beta/gen_7_sun_moon/battle_royal_bps.py"
+name: "USUM – Battle Royal BP Farm"
+game: "Ultra Sun / Ultra Moon (3DS)"
+console: "3DS"
+draft: true
+kind: "item / BP farm"
+start_state: "USUM: saved at the Battle Royal Dome desk, 3 Pokemon with Explosion first"
+cycles: 5
+timeout_minutes: 30
+cycle_log: "Battle\\s*\\#(\\d+)"
+max_static_seconds: 120
+checkpoints:
+  - name: "loop end"
+    when: "TODO: log line or minutes"
+    expect: "back at the start position with the expected reward"
+success: "Each loop completes and the counter (money, balls, BP) changes as expected; the game ends where it started."
+notes: "Same presses (0.93) but fixed waits replace the light-sensor checks (blind)."

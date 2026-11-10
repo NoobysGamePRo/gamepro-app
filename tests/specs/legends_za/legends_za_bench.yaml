@@ -1,0 +1,17 @@
+script: "Beta/legends_za/legends_za_bench.py"
+name: "Legends ZA - Bench"
+game: "Legends: Z-A (Nintendo Switch)"
+console: "Switch / Switch 2"
+draft: true
+kind: "item / BP farm"
+start_state: "Legends Z-A: at a bench with the menu open"
+cycles: 5
+timeout_minutes: 30
+cycle_log: "Loop\\s*(\\d+)"
+max_static_seconds: 120
+checkpoints:
+  - name: "loop end"
+    when: "TODO: log line or minutes"
+    expect: "back at the start position with the expected reward"
+success: "Each loop completes and the counter (money, balls, BP) changes as expected; the game ends where it started."
+notes: "Faithful port of Carl's Python original. Blind timing."
