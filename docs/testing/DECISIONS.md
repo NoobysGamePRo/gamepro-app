@@ -2,6 +2,15 @@
 
 Newest first. Each entry: date, decision, why.
 
+## 2026-11-11 (Phase 1: static triage)
+- **Ports are checked against their C++ originals, not just for errors.** Every Beta script loads and passes the code checks, yet about a third don't do what the original program did. `port_compare.py` scores each port against its C++ original by the commands they send, and the low scorers were read by hand.
+- **Judgement lives in `triage-notes.csv`, which takes precedence over the automatic status.** `triage.py` stays repeatable: re-running it regenerates `triage-report.csv` and never overwrites a spec.
+- **Statuses:** likely-ok / fix-in-pr / needs-fix / unclear / in-development (the last for Carl's own work in progress, e.g. FRLG Breeding).
+- **Draft specs get their pass rule from the script's kind** (soft-reset hunt, wild, egg, farm, trade), following the Phase 0 answer on shiny hunts. Cycle counts: 5 for soft-reset hunts, 10 for wild, 3 for eggs and trades, 5 for farms.
+- **Specs are YAML** (PyYAML, dev only). The generator writes JSON-style quoted strings, which are valid YAML.
+- **Phase 1 fixes only small, certain bugs** (gamepro-scripts PRs #3 and #4). Re-ports that change detection or flow wait for Carl's priority order and hardware tests.
+- **Imports are checked against the real exe contents** (PyInstaller `PYZ-00.toc` / `Analysis-00.toc` plus built-in modules). A script importing something the exe doesn't freeze would work from source but fail for customers.
+
 ## 2026-11-11 (Carl's answers to the Phase 0 questions)
 - **Judge = Option B: no Claude API key.** The runner saves checkpoint frames and results overnight, and Claude Code judges them in a morning session on Carl's subscription. This avoids separate API billing while the specs are still being tuned. Option A (API key, fully unattended judging) can be added later without changing the runner.
 - **Promotion clean-up: `retired.json` + app v1.10** (gamepro-app PR #3). The list is generated from the scripts repo's git history: every path no longer published, with the sha256 of every published version. Get Scripts deletes a local file only if it matches one of those hashes. Content hashes were chosen over a plain old→new list because a customer's own edits must never be deleted. `moved_data` carries user data folders across.
