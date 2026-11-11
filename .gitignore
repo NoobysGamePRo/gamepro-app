@@ -17,3 +17,6 @@ desktop.ini
 
 # Secrets / local config
 *.env
+
+# Headless test runs (frames and logs stay on the test PC)
+test_runs/

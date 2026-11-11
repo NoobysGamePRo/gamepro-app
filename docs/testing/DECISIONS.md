@@ -2,6 +2,34 @@
 
 Newest first. Each entry: date, decision, why.
 
+## 2026-11-11 (Phase 2: headless test mode)
+- **The test mode is a separate entry point, `tools/testing/gamepro_test.py`, not `main.py test`.** `main.py` and the exe stay byte-for-byte as they were, and PyInstaller never picks up the test code. This follows Carl's rule that test tools are never customer-facing.
+- **No duplicated logic.** Loading a script (`load_script_class`), running it (`run_script`), the scripts folder and the corner-warp maths moved from `gui/app.py` and `gui/video_panel.py` into `core/runner.py`. The GUI and the test mode both call it. The GUI's behaviour is unchanged.
+- **Only the human parts are substituted:**
+  - calibration comes from the rig profile (`tests/rigs/<rig>.yaml`);
+  - SETTINGS come from the spec, then `--set`;
+  - `wait_for_direction` comes from the spec's `directions`.
+
+  Calibration answers are keyed `corners.default` and `rects.<script>.<n>`, and are captured once per rig with `--calibrate`. They are stored in panel coordinates, exactly what the GUI would return, including the warped view.
+- **Runs use a per-rig sandbox copy of the scripts.** Scripts write calibration and other data next to themselves. A first fake run wrote `Beta/calibration/crystal_shiny_eevee.json` into the real scripts folder (since deleted), so runs now execute from `test_runs/_sandbox/<rig>/`. Calibration still persists per rig, as it does for a customer.
+- **Safety, enforced by the runner:**
+  - a hard timeout (spec, default 30 min);
+  - a cycle limit (counted by the `cycle_log` regex, ceiling 1000);
+  - the camera watchdog: an identical or missing frame for 10 s is `camera-lost`, and no visible change for `max_static_seconds` is `camera-frozen`;
+  - stop: the stop flag, up to 20 s for the script to return, then **always** `release_all()` and close the port.
+
+  The self-tests (`tests/test_headless.py`, 11 cases, fake hardware) cover each rule, including a script that ignores Stop. Writing that test found a real bug, now fixed: the runner waited forever on such a script.
+- **A "shiny found" log line (`target_log`) ends the run as `target-found`.** Frames are saved at the line and 2 s later, and the console is left on the shiny.
+- **Checkpoint `when`** is `{log: regex, delay_seconds}` or `{every_minutes}`. Draft checkpoints still marked TODO are skipped with a warning. Filling them in is Phase 3.
+- **`test_runs/` is git-ignored.** Frames and logs stay on the test PC.
+
+## 2026-11-11 (Carl's answers to the Phase 1 questions)
+- **Crystal Game Corner:** keep the shiny prize hunter. The coin farmer is not wanted.
+- **ORAS Horde:** retire it. XY Horde (Release) covers ORAS, but first needs to handle ability pop-ups during the encounter.
+- **Re-port order:** as proposed: wild detection (9 scripts), then single-step fixes, then breeding.
+- **Unported C++ programs:** port all 14 (Gen VI Horde to be checked against XY Horde first).
+- **Go-ahead for Phase 2.** gamepro-app PR #4 and gamepro-scripts PRs #3 and #4 are still open for review.
+
 ## 2026-11-11 (Phase 1: static triage)
 - **Ports are checked against their C++ originals, not just for errors.** Every Beta script loads and passes the code checks, yet about a third don't do what the original program did. `port_compare.py` scores each port against its C++ original by the commands they send, and the low scorers were read by hand.
 - **Judgement lives in `triage-notes.csv`, which takes precedence over the automatic status.** `triage.py` stays repeatable: re-running it regenerates `triage-report.csv` and never overwrites a spec.

@@ -16,6 +16,8 @@ import numpy as np
 import cv2
 from typing import Optional, Callable, Tuple
 
+from core.runner import corners_to_warp
+
 PANEL_W = 640
 PANEL_H = 480
 
@@ -276,43 +278,11 @@ class VideoPanel(tk.Canvas):
 
     def _compute_warp(self):
         """Compute perspective transform from the 4 collected corner points."""
-        # Sort clicks into TL / TR / BR / BL regardless of click order.
-        # Sum (x+y): smallest = TL, largest = BR.
-        # Diff (x-y): largest = TR (high x, low y), smallest = BL (low x, high y).
-        pts = self._corners_collected
-        s = [p[0] + p[1] for p in pts]
-        d = [p[0] - p[1] for p in pts]
-        tl = pts[s.index(min(s))]
-        br = pts[s.index(max(s))]
-        tr = pts[d.index(max(d))]
-        bl = pts[d.index(min(d))]
-        src = np.array([tl, tr, br, bl], dtype=np.float32)
-
-        # Output dimensions: average of opposite edge lengths
-        w_top  = float(np.linalg.norm(src[1] - src[0]))
-        w_bot  = float(np.linalg.norm(src[2] - src[3]))
-        h_left = float(np.linalg.norm(src[3] - src[0]))
-        h_right= float(np.linalg.norm(src[2] - src[1]))
-
-        out_w = max(1, int((w_top + w_bot) / 2))
-        out_h = max(1, int((h_left + h_right) / 2))
-
-        dst = np.array([
-            [0,         0        ],
-            [out_w - 1, 0        ],
-            [out_w - 1, out_h - 1],
-            [0,         out_h - 1],
-        ], dtype=np.float32)
-
-        matrix = cv2.getPerspectiveTransform(src, dst)
-        self._warp_matrix = matrix
-        self._warp_out_w  = out_w
-        self._warp_out_h  = out_h
-        self._corners_result = {
-            'matrix': matrix,
-            'out_w':  out_w,
-            'out_h':  out_h,
-        }
+        warp = corners_to_warp(self._corners_collected)
+        self._warp_matrix = warp['matrix']
+        self._warp_out_w  = warp['out_w']
+        self._warp_out_h  = warp['out_h']
+        self._corners_result = warp
 
     # ── Mouse handlers ────────────────────────────────────────────────────────
 

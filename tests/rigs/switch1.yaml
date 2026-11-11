@@ -1,0 +1,10 @@
+# Rig: Switch 2 robot on Carl's desk (see tools/testing/README.md)
+name: switch1
+console: Switch
+port: COM6
+camera: 1
+# Answers to request_calibration(). Filled in by running a test once with --calibrate.
+#   corners.default: the 4 screen corners, as clicked on the 640x480 camera frame
+#   rects.<script>.<n>: the n-th rectangle that script asks for, as drawn on the app's video panel
+corners: {}
+rects: {}

@@ -70,26 +70,29 @@ The automatic checks alone passed 60 of the 69 scripts. Every one of the 23 need
    - FRLG Starter said "3DS".
 6. **Settings that can only be changed by editing code.** Starter choice, prize slot, portal direction and trade count are class constants. Moving them into `SETTINGS` (the dialog) would let customers choose them. That's a separate improvement, not part of this triage.
 
-## Needs your decision
+## Decisions (Carl, 2026-11-11)
 
-- **Crystal Game Corner.** The C++ original is a *slot-machine coin farmer*. The Beta script is a different program: a prize-Pokémon shiny hunter. Do you want either, or both?
-- **ORAS Horde vs XY Horde.** *XY - Horde Encounter* (Release) says it also works in ORAS. Should the separate *ORAS - Horde Encounter* be retired instead of fixed?
-- **Re-port order for the 23 needs-fix scripts.** I suggest:
-  1. the wild-encounter detection (one shared approach, 9 scripts);
-  2. the single-step fixes (Crabrawler reset, Friend Safari flee, Sudowoodo, Celebi, DP Starter);
-  3. the breeding rewrites last.
-- **C++ programs that were never ported (16).** These are:
-  - Ditto Box Mash A;
-  - Generic Shiny Static Encounter;
-  - ORAS Starter (Record Encounter);
-  - ORAS Story-mode Lati@s;
-  - SOS Chaining (Ditto track);
-  - Shiny Dojo Hitmonchan;
-  - USUM Blacephalon/Stakataka, Partner Cap Pikachu, Poipole, Surf Pikachu, Type: Null (USUM version), UB First Time Encounter and Wonder Trade;
-  - Gen VI Horde Encounters;
-  - Colour Detection and Light Sensor Test (both just removed, so ignore).
-
-  Should any of them be ported?
+- **Crystal Game Corner: keep the shiny prize hunter.** The slot-machine coin farmer is not wanted. The `press_x` fix in gamepro-scripts PR #3 stands.
+- **ORAS Horde: retire it and reuse XY Horde (Release) for ORAS.** XY Horde needs one improvement first: abilities that pop up during the encounter (e.g. an ability banner as the horde appears) must not throw off the detection.
+- **Re-port order: as proposed.**
+  1. The wild-encounter detection, using one shared approach for all 9 scripts.
+  2. The single-step fixes: Crabrawler reset, Friend Safari flee, Sudowoodo, Celebi and DP Starter.
+  3. The breeding rewrites last.
+- **The unported C++ programs: port them all.** That is the 14 programs below. Colour Detection and Light Sensor Test were removed on purpose. Gen VI Horde Encounters gets checked against XY Horde first, since it may be the same program.
+  - Ditto Box Mash A
+  - Generic Shiny Static Encounter
+  - ORAS Starter (Record Encounter)
+  - ORAS Story-mode Lati@s
+  - SOS Chaining (Ditto track)
+  - Shiny Dojo Hitmonchan
+  - USUM Blacephalon/Stakataka
+  - Partner Cap Pikachu
+  - Poipole
+  - Surf Pikachu
+  - Type: Null (USUM version)
+  - UB First Time Encounter
+  - Wonder Trade
+  - Gen VI Horde Encounters
 
 ## What Phase 2 (headless test mode) must handle
 
