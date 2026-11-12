@@ -47,6 +47,7 @@ from gui.settings_dialog import SettingsDialog
 from gui.script_builder import ScriptBuilderDialog
 from gui.video_panel import VideoPanel, PANEL_W, PANEL_H
 from gui.readme_viewer import ReadmeViewer, readme_path
+from gui.stick_pad import StickPad
 from core.script_sync import apply_retired
 from scripts.base_script import BaseScript
 
@@ -84,7 +85,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.10'
+APP_VERSION     = 'v1.11'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
@@ -615,6 +616,11 @@ class GameProApp(tk.Tk):
         tk.Label(dpad, text='click = press  \u00b7  dbl = hold', bg=BG2, fg='#556688',
                  font=('Arial', 7)).grid(row=4, column=0, columnspan=3, pady=(2, 0))
 
+        # ── Analogue stick (Switch firmware v1.6+) ─────────────────────────
+        self._stick_pad = StickPad(row, send=self._stick_send)
+        self._stick_pad.pack(side='left', padx=(10, 0))
+        self._manual_btns.append(self._stick_pad)
+
         # ── Separator ──────────────────────────────────────────────────────
         tk.Frame(row, bg=BG3, width=1).pack(side='left', fill='y', padx=10)
 
@@ -754,6 +760,13 @@ class GameProApp(tk.Tk):
             pass
         self._manual_queue.put_nowait(action_name)
 
+    def _stick_send(self, angle, magnitude):
+        """From the stick pad: hold at angle/magnitude, or centre when angle is None."""
+        if angle is None:
+            self._manual_send(('stick_centre',))
+        else:
+            self._manual_send(('stick_hold', angle, magnitude))
+
     def _manual_worker_loop(self):
         """Single background thread that executes manual commands one at a time.
         Uses fire() (no ACK wait) so the servo responds immediately."""
@@ -765,7 +778,9 @@ class GameProApp(tk.Tk):
                 # Route direction presses to the script if it's waiting for one
                 _dir_map = {'press_up': 'up', 'press_down': 'down',
                             'press_left': 'left', 'press_right': 'right'}
-                if (self._controller._waiting_for_direction
+                if isinstance(action_name, tuple):      # (method, *args), e.g. the stick pad
+                    getattr(self._controller, action_name[0])(*action_name[1:])
+                elif (self._controller._waiting_for_direction
                         and action_name in _dir_map):
                     self._controller.set_direction_input(_dir_map[action_name])
                 else:
@@ -1194,6 +1209,29 @@ class GameProApp(tk.Tk):
         self._port_dot.config(fg='#00cc44')
         self._log(f'Connected to {port}')
         self._set_manual_controls_state('normal')
+
+        # Which firmware? The stick pad needs Switch v1.6+ (older firmware doesn't answer)
+        self._stick_pad.set_supported(False)
+        def _ask_version(c=ctrl):
+            # The Nano resets when the port opens and misses a query sent while its
+            # bootloader runs (seen on the CH340 rig), so ask a few times.
+            ok = False
+            for attempt in range(4):
+                if c is not self._controller:
+                    return
+                try:
+                    c.firmware = None
+                    ok = c.supports_stick()
+                except Exception:
+                    ok = False
+                if c.firmware:
+                    break
+                time.sleep(1.0)
+            if c is self._controller:
+                msg = (f'Firmware: {c.firmware}' if c.firmware else
+                       'Firmware: no version reply (Switch firmware older than v1.6, or 3DS)')
+                self.after(0, lambda: (self._stick_pad.set_supported(ok), self._log(msg)))
+        threading.Thread(target=_ask_version, daemon=True).start()
 
         # If a firmware update just completed, restore the backed-up calibration
         if self._pending_cal_restore:
