@@ -85,7 +85,7 @@ FIRMWARE_RELEASE_API_3DS    = "https://api.github.com/repos/NoobysGamePRo/gamepr
 FIRMWARE_RELEASE_API_SWITCH = "https://api.github.com/repos/NoobysGamePRo/gamepro-firmware-switch/releases/latest"
 
 # ── App version & update check ────────────────────────────────────────────────
-APP_VERSION     = 'v1.10'
+APP_VERSION     = 'v1.11'
 APP_RELEASE_API = "https://api.github.com/repos/NoobysGamePRo/gamepro-app/releases/latest"
 APP_DOWNLOAD_URL = "https://github.com/NoobysGamePRo/gamepro-app/releases/latest"
 
@@ -1213,13 +1213,24 @@ class GameProApp(tk.Tk):
         # Which firmware? The stick pad needs Switch v1.6+ (older firmware doesn't answer)
         self._stick_pad.set_supported(False)
         def _ask_version(c=ctrl):
-            try:
-                ok = c.supports_stick()
-            except Exception:
-                ok = False
+            # The Nano resets when the port opens and misses a query sent while its
+            # bootloader runs (seen on the CH340 rig), so ask a few times.
+            ok = False
+            for attempt in range(4):
+                if c is not self._controller:
+                    return
+                try:
+                    c.firmware = None
+                    ok = c.supports_stick()
+                except Exception:
+                    ok = False
+                if c.firmware:
+                    break
+                time.sleep(1.0)
             if c is self._controller:
-                self.after(0, lambda: (self._stick_pad.set_supported(ok),
-                                       self._log(f'Firmware: {c.firmware}') if c.firmware else None))
+                msg = (f'Firmware: {c.firmware}' if c.firmware else
+                       'Firmware: no version reply (Switch firmware older than v1.6, or 3DS)')
+                self.after(0, lambda: (self._stick_pad.set_supported(ok), self._log(msg)))
         threading.Thread(target=_ask_version, daemon=True).start()
 
         # If a firmware update just completed, restore the backed-up calibration
