@@ -74,7 +74,7 @@ Each run gets its own folder, `test_runs/<date-time>_<script>/`, containing:
 
 `tests/rigs/<rig>.yaml` holds the port, the camera index and the calibration answers:
 
-- `corners.default` is used by any script that asks for the screen corners.
+- **Screen corners are detected automatically** on every run (`core/screen_detect.py`, the same detection the app offers for one-click confirm), so they follow the screen if it shifts. `corners.default` in the rig file is only the backup when detection fails. `result.json` records which was used (`source: auto / rig / manual`). Use `--no-auto-corners` to always use the rig value.
 - `rects.<script>.<n>` answers the n-th rectangle that script asks for. A spec can name a different key with `rig_key`.
 
 When an answer is missing the run stops with `needs-calibration`. Add `--calibrate` and the run instead opens a window showing what the app's video panel would show (including the corner warp). You draw the answer once and it's saved to the rig file.

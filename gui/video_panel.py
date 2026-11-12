@@ -17,9 +17,13 @@ import cv2
 from typing import Optional, Callable, Tuple
 
 from core.runner import corners_to_warp
+from core.screen_detect import detect_screen_live
 
 PANEL_W = 640
 PANEL_H = 480
+
+# "Use detected corners" button drawn on the canvas during corners calibration
+_AUTO_BTN = (PANEL_W // 2 - 120, PANEL_H - 52, PANEL_W // 2 + 120, PANEL_H - 16)
 
 
 class VideoPanel(tk.Canvas):
@@ -59,6 +63,8 @@ class VideoPanel(tk.Canvas):
         self._corners_result = None
         self._corners_event: Optional[threading.Event] = None
         self._corners_prompt = ''
+        self._auto_corners = None         # detected screen corners awaiting one-click confirm
+        self._auto_searching = False
 
         # Perspective warp state (active after corners calibration)
         self._warp_matrix = None
@@ -153,10 +159,23 @@ class VideoPanel(tk.Canvas):
         # Corners calibration prompt + raise persistent markers above the frame
         elif self._corners_mode:
             n = len(self._corners_collected)
-            text = (
-                f"{self._corners_prompt}  —  "
-                f"Click corner {n + 1} of 4 (any order)"
-            )
+            auto = self._auto_corners if n == 0 else None
+            if auto:
+                text = "Screen found  —  click ✓ below, or click the 4 corners"
+                flat = [v for p in auto for v in p]
+                self.create_polygon(*flat, outline='#00ee55', fill='', width=3, tags='overlay')
+                x0, y0, x1, y1 = _AUTO_BTN
+                self.create_rectangle(x0, y0, x1, y1, fill='#1e8a3c', outline='white',
+                                      width=2, tags='overlay')
+                self.create_text((x0 + x1) // 2, (y0 + y1) // 2, text='✓  Use detected corners',
+                                 fill='white', font=('Arial', 12, 'bold'), tags='overlay')
+            elif self._auto_searching and n == 0:
+                text = f"{self._corners_prompt}  —  looking for the screen..."
+            else:
+                text = (
+                    f"{self._corners_prompt}  —  "
+                    f"Click corner {n + 1} of 4 (any order)"
+                )
             self.create_text(
                 PANEL_W // 2, 20,
                 text=text,
@@ -217,11 +236,24 @@ class VideoPanel(tk.Canvas):
         self._corners_result = None
         self._corners_prompt = prompt
 
+        self._auto_corners = None
         event = threading.Event()
         self._corners_event = event
         self._corners_mode = True
 
+        # Try to find the screen automatically; the person confirms with one click,
+        # or ignores it and clicks the 4 corners as before.
+        self._auto_searching = True
+        try:
+            found = detect_screen_live(self._frame_grabber, stop_event=event)
+        except Exception:
+            found = None
+        self._auto_searching = False
+        if found and self._corners_mode and not self._corners_collected:
+            self._auto_corners = found
+
         event.wait()
+        self._auto_corners = None
         return self._corners_result
 
     def cancel_calibration(self):
@@ -231,6 +263,7 @@ class VideoPanel(tk.Canvas):
             self._cal_mode = False
             self._cal_event.set()
 
+        self._auto_corners = None
         if self._corners_event and not self._corners_event.is_set():
             self._corners_result = None
             self._corners_mode = False
@@ -288,7 +321,14 @@ class VideoPanel(tk.Canvas):
 
     def _on_press(self, event):
         if self._corners_mode:
-            self._collect_corner(event.x, event.y)
+            auto = self._auto_corners if not self._corners_collected else None
+            self._auto_corners = None
+            x0, y0, x1, y1 = _AUTO_BTN
+            if auto and x0 <= event.x <= x1 and y0 <= event.y <= y1:
+                for px, py in auto:           # confirmed: same as clicking them
+                    self._collect_corner(px, py)
+            else:
+                self._collect_corner(event.x, event.y)
             return
         if self._cal_mode:
             self._cal_start = (event.x, event.y)

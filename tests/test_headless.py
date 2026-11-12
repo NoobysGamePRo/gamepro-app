@@ -13,6 +13,7 @@ import unittest
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(APP_DIR, 'tools', 'testing'))
 sys.path.insert(0, APP_DIR)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gamepro_test as gt   # noqa: E402
 
@@ -141,8 +142,24 @@ class HeadlessRunTests(unittest.TestCase):
             ''', spec={'cycle_log': 'Soft reset'}, rig=rig, cycles=1)
         self.assertEqual(r['status'], 'completed')
         self.assertEqual([c['rig_key'] for c in r['calibration']], ['corners.default', 'rects.probe.1'])
+        self.assertEqual(r['calibration'][0]['source'], 'rig')     # plain grey camera: no screen found
         with open(os.path.join(self.tmp.name, 'out', 'log.txt'), encoding='utf-8') as f:
             self.assertIn('rect (100, 120, 30, 40)', f.read())
+
+    def test_corners_detected_automatically(self):
+        import cv2
+        from test_screen_detect import camera_picture, GBA
+        img = os.path.join(self.tmp.name, 'screen.png')
+        cv2.imwrite(img, camera_picture(GBA))
+        r = self.run_script('''
+            class P(BaseScript):
+                NAME = "probe"
+                def run(self, controller, frame_grabber, stop_event, log, request_calibration):
+                    w = request_calibration("Click the 4 corners", mode="corners")
+                    log(f"cycle {w['out_w']}x{w['out_h']}")
+            ''', spec={'cycle_log': 'cycle'}, grabber=gt.FakeGrabber(img), cycles=1)
+        self.assertEqual(r['status'], 'completed')
+        self.assertEqual(r['calibration'][0]['source'], 'auto')
 
     def test_missing_calibration_stops(self):
         r = self.run_script('''

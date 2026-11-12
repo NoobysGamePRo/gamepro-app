@@ -47,6 +47,7 @@ from core.camera import FrameGrabber                                   # noqa: E
 from core.controller import GameProController                          # noqa: E402
 from core.runner import (default_scripts_dir, load_script_class,      # noqa: E402
                          run_script, corners_to_warp)
+from core.screen_detect import detect_screen_live                      # noqa: E402
 import rig as rigmod                                                   # noqa: E402
 
 SPECS_DIR = os.path.join(APP_DIR, 'tests', 'specs')
@@ -144,7 +145,7 @@ class HeadlessRun:
 
     def __init__(self, script_path, spec, rig, out_dir, controller, grabber,
                  cycles=None, timeout_minutes=None, calibrate=False, settings=None,
-                 scripts_dir=None, source_dir=None, echo=True):
+                 scripts_dir=None, source_dir=None, auto_corners=True, echo=True):
         self.script_path = script_path
         self.spec = spec or {}
         self.rig = rig or {'corners': {}, 'rects': {}}
@@ -152,6 +153,7 @@ class HeadlessRun:
         self.controller = controller
         self.grabber = grabber
         self.calibrate = calibrate
+        self.auto_corners = auto_corners
         self.echo = echo
         self.scripts_dir = scripts_dir
         self.source_dir = source_dir or scripts_dir
@@ -276,8 +278,17 @@ class HeadlessRun:
             if not key or key == 'TODO':
                 key = f'{stem}.{self.rect_count}'
             table = 'rects'
-        value = self.rig[table].get(key)
+        value, source = None, 'rig'
+        if mode == 'corners' and self.auto_corners:
+            # Same detection the app offers for one-click confirm; the rig value is the backup
+            value = detect_screen_live(self.grabber, stop_event=self.stop_event)
+            source = 'auto'
+            if value is None:
+                self.log('[test] screen not detected automatically - using the rig corners', internal=True)
+        if value is None:
+            value, source = self.rig[table].get(key), 'rig'
         if value is None and self.calibrate:
+            source = 'manual'
             self.paused_watchdog = True
             try:
                 value = (rigmod.capture_corners(self.grabber, prompt) if mode == 'corners'
@@ -289,13 +300,14 @@ class HeadlessRun:
                 rigmod.save_rig(self.rig)
                 self.log(f'[test] saved {table}.{key} = {value} to {os.path.basename(self.rig["_path"])}', internal=True)
         self.cal_used.append({'mode': mode, 'prompt': prompt, 'rig_key': f'{table}.{key}',
-                              'value': value})
+                              'source': source, 'value': value})
         if value is None:
             self.save_frame('needs_calibration', prompt)
             self.finish('needs-calibration',
                         f'rig has no {table}.{key} for "{prompt}" - rerun with --calibrate')
             return None if mode == 'corners' else (0, 0, 1, 1)
-        self.log(f'[test] calibration "{prompt}" answered from {table}.{key}', internal=True)
+        self.log(f'[test] calibration "{prompt}" answered from '
+                 f'{"automatic screen detection" if source == "auto" else table + "." + key}', internal=True)
         if mode == 'corners':
             self.warp = corners_to_warp([tuple(p) for p in value])
             return self.warp
@@ -570,6 +582,8 @@ def parse_args(argv=None):
                     help='override a script SETTINGS value (YAML value syntax)')
     ap.add_argument('--calibrate', action='store_true',
                     help='if the rig lacks a calibration answer, ask for it in a window and save it')
+    ap.add_argument('--no-auto-corners', action='store_true',
+                    help='do not detect the screen corners; use the rig corners')
     ap.add_argument('--fresh-calibration', action='store_true',
                     help="forget calibration the scripts saved in this rig's sandbox")
     ap.add_argument('--scripts-dir', default=default_scripts_dir())
@@ -622,6 +636,7 @@ def main(argv=None):
     run = HeadlessRun(script_path, spec, rig, out_dir, controller, grabber,
                       cycles=a.cycles, timeout_minutes=a.timeout_minutes,
                       calibrate=a.calibrate, settings=settings, scripts_dir=sandbox,
+                      auto_corners=not a.no_auto_corners,
                       source_dir=a.scripts_dir)
     try:
         result = run.execute()

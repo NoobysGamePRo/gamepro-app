@@ -2,6 +2,13 @@
 
 Newest first. Each entry: date, decision, why.
 
+## 2026-11-13 (automatic screen corners)
+- **Carl's call: one-click confirm, with manual setup as the backup.** When a script asks for the screen corners, the app now looks for the screen for about 2 s. If it finds it, it draws a green outline and a "✓ Use detected corners" button. Clicking 4 corners yourself still works and overrides it. If nothing is found, the prompt is exactly the old 4-click one. Only the 8 corner-calibration scripts are affected; the 52 that ask for a region are unchanged.
+- **Detection (`core/screen_detect.py`).** It thresholds the lit area against the bezel brightness and fits a straight line to each side with RANSAC, taking the corners from where the lines cross. Dark scenery touching an edge therefore only removes part of a side. It rejects anything that isn't solid, inside the picture, square-on (opposite sides within 5 %) and a known screen shape (GBC, DS/3DS lower, GBA, 3DS upper, Switch). A result needs at least 3 of 8 frames over 2 s to agree within 4 px.
+- **Checked on about 870 saved frames from the Switch rig.** 683 were accepted; all but two were within 12 px of the reference corners. The two were a mosaic image and a frame from a day when the screen sat differently, as seen in manual checks of the fitted edges. 187 were rejected and would fall back to manual: HOME menu off the picture, boot screens, broken edges.
+- **The screen moves a few pixels between sessions,** probably nudged by the servos. So test mode detects the corners on every run, and the rig file's `corners.default` is only the backup.
+- **3DS:** the camera only sees the top screen (the bottom screen has the light sensor), so there is one lit area to find. This hasn't been tried on a 3DS rig yet.
+
 ## 2026-11-11 (Phase 2: headless test mode)
 - **The test mode is a separate entry point, `tools/testing/gamepro_test.py`, not `main.py test`.** `main.py` and the exe stay byte-for-byte as they were, and PyInstaller never picks up the test code. This follows Carl's rule that test tools are never customer-facing.
 - **No duplicated logic.** Loading a script (`load_script_class`), running it (`run_script`), the scripts folder and the corner-warp maths moved from `gui/app.py` and `gui/video_panel.py` into `core/runner.py`. The GUI and the test mode both call it. The GUI's behaviour is unchanged.
