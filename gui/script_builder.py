@@ -446,6 +446,18 @@ class ScriptBuilderDialog(tk.Toplevel):
             b.grid(row=r, column=c, padx=1, pady=1, sticky='ew')
             self._rec_btns[cmd] = b
 
+        # Analogue stick step (Switch firmware v1.6+): angle, strength, hold or tap
+        r = (len(BTN_DEFS) + COLS - 1) // COLS
+        b = tk.Button(
+            btn_grid, text='Stick…', width=5,
+            command=self._record_stick,
+            bg=BG3, fg=FG, relief='flat',
+            font=('Arial', 9, 'bold'), cursor='hand2',
+            padx=2, pady=5, state='disabled',
+        )
+        b.grid(row=r, column=0, columnspan=2, padx=1, pady=1, sticky='ew')
+        self._rec_btns['stick'] = b
+
         # Screen calibration option row (above video canvas)
         cal_opt_row = tk.Frame(right, bg=BG, pady=2)
         cal_opt_row.pack(fill='x')
@@ -576,7 +588,7 @@ class ScriptBuilderDialog(tk.Toplevel):
                 self.after(0, lambda b=s.get('button', '?'):
                            self._status_lbl.config(text=f'Testing step {idx+1}/{len(steps)}: {b}'))
                 try:
-                    getattr(self._controller, cmd)()
+                    getattr(self._controller, cmd)(*s.get('args', []))
                 except Exception as e:
                     self.after(0, lambda e=e:
                                self._status_lbl.config(text=f'Error: {e}'))
@@ -656,7 +668,31 @@ class ScriptBuilderDialog(tk.Toplevel):
             self._timer_lbl.config(text=f'{int(e // 60):02d}:{e % 60:04.1f}')
             self._timer_id = self.after(100, self._tick_timer)
 
-    def _record_button(self, label: str, cmd: str):
+    def _record_stick(self):
+        """Ask for a stick move and record it as a step with arguments."""
+        if not self._recording:
+            return
+        from tkinter import simpledialog
+        txt = simpledialog.askstring(
+            'Stick',
+            'Angle (0 = up, 90 = right), strength %, tap ms (0 = hold)\n'
+            'e.g.  45, 60, 0   or   180, 100, 150',
+            initialvalue=getattr(self, '_last_stick', '0, 100, 0'), parent=self)
+        if not txt:
+            return
+        try:
+            angle, mag, ms = [int(float(v)) for v in txt.replace(' ', '').split(',')]
+        except ValueError:
+            self._status_lbl.config(text='Stick: enter three numbers, e.g. 45, 60, 0')
+            return
+        self._last_stick = txt
+        angle, mag = angle % 360, max(0, min(100, mag))
+        if ms > 0:
+            self._record_button(f'S{angle}° {mag}% {ms}ms', 'stick_tap', [angle, mag, ms])
+        else:
+            self._record_button(f'S{angle}° {mag}%', 'stick_hold', [angle, mag])
+
+    def _record_button(self, label: str, cmd: str, args=None):
         if not self._recording:
             return
         now   = time.time()
@@ -669,6 +705,8 @@ class ScriptBuilderDialog(tk.Toplevel):
 
         # Add the new step (delay will be updated by the NEXT click, or left as 0)
         step = {'type': 'button', 'button': label, 'cmd': cmd, 'delay': 0.0, 'note': ''}
+        if args:
+            step['args'] = list(args)
         self._steps.append(step)
         self._refresh_list()
         self._step_list.see(tk.END)
@@ -677,15 +715,15 @@ class ScriptBuilderDialog(tk.Toplevel):
         # The controller call blocks until the servo ACKs, so it must not run on the
         # main thread.
         if self._controller and self._controller.is_open():
-            def _send(c=cmd):
+            def _send(c=cmd, a=tuple(args or ())):
                 try:
-                    getattr(self._controller, c)()
-                except Exception:
-                    pass
+                    getattr(self._controller, c)(*a)
+                except Exception as e:
+                    self.after(0, lambda e=e: self._status_lbl.config(text=f'Error: {e}'))
             threading.Thread(target=_send, daemon=True).start()
 
         # Brief colour flash on the clicked button
-        btn = self._rec_btns.get(cmd)
+        btn = self._rec_btns.get('stick' if cmd.startswith('stick_') else cmd)
         if btn:
             btn.config(bg='#88ee00')
             self.after(150, lambda b=btn: b.config(bg=BG3))
@@ -1454,7 +1492,7 @@ class ScriptBuilderDialog(tk.Toplevel):
                     val = s.get('delay', 0.0)
                     lines += [
                         f'{indent}# Step {step}: [{s.get("button", "?")}]{note}',
-                        f"{indent}controller.{info['cmd']}()",
+                        f"{indent}controller.{info['cmd']}({', '.join(str(a) for a in s.get('args', []))})",
                     ]
                     if val > 0:
                         lines.append(
@@ -2331,6 +2369,9 @@ release_all()
 soft_reset()    # Home / SR1 button
 soft_reset_z()  # SR2 button
 wonder_trade()  # + button (Switch) or W button
+stick_hold(angle, magnitude=100)        # Switch fw 1.6+: 0 = up, 90 = right; % strength
+stick_tap(angle, magnitude=100, ms=100) # push for ms, then back to centre
+stick_centre()
 ```
 
 Each call blocks until the Arduino ACKs (servo finished), so there is no

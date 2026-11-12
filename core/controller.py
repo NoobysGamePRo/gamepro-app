@@ -10,6 +10,9 @@ Arduino command protocol (single character sent via serial):
   '8' = hold Up        '2' = hold Down     '4' = hold Left    '6' = hold Right
   '0' = release all    'S' = soft reset 1  'Z' = soft reset 2  'W' = wonder trade
   'C' = read light value (0-255 raw byte)
+  'V' = firmware version line (Switch v1.6+; older firmware does not reply)
+  'J' + angle(2 bytes, little-endian) + magnitude(0-100) + duration(x10 ms, 0 = hold)
+      = joystick at any angle / strength (Switch v1.6+). Angle 0 = up, 90 = right.
 
 ACK protocol (v4.4+):
   Every action command returns 'K' when the servo has finished moving.
@@ -18,9 +21,13 @@ ACK protocol (v4.4+):
   button presses — timing is now servo-accurate rather than PC-sleep-accurate.
 """
 
+import re
 import serial
 import serial.tools.list_ports
 import threading
+from typing import Optional
+
+STICK_MIN_VERSION = (1, 6)    # Switch firmware that understands 'J'
 
 
 class GameProController:
@@ -43,6 +50,8 @@ class GameProController:
         self._waiting_for_direction = False
         self._direction_event       = threading.Event()
         self._direction_value       = None
+
+        self.firmware = None          # version line from 'V', set by firmware_version()
 
     # ── Button commands ──────────────────────────────────────────────────────
 
@@ -67,6 +76,56 @@ class GameProController:
     def wonder_trade(self): self._send('W')
     def press_plus(self):   self._send('W')   # Switch: + (same servo as HOME, other way)
     def press_home(self):   self._send('S')   # Switch: HOME
+
+    # ── Joystick: any angle and strength (Switch firmware v1.6+) ────────────
+
+    def stick_hold(self, angle: float, magnitude: float = 100):
+        """Push the stick towards `angle` degrees (0 = up, 90 = right, clockwise) at
+        `magnitude` percent and keep it there. Changing direction while held glides the
+        stick to the new position. Release with stick_centre() or release_all()."""
+        self._stick(angle, magnitude, 0)
+
+    def stick_tap(self, angle: float, magnitude: float = 100, ms: int = 100):
+        """Push the stick for `ms` milliseconds (10-2550), then let it return to centre."""
+        self._stick(angle, magnitude, max(1, min(255, int(round(ms / 10)))))
+
+    def stick_centre(self):
+        """Let the stick return to centre (buttons are released too)."""
+        self._stick(0, 0, 0)
+
+    def supports_stick(self) -> bool:
+        """True if the connected firmware understands the 'J' joystick command."""
+        if self.firmware is None:
+            self.firmware_version()
+        m = re.search(r'Switch (\d+)\.(\d+)', self.firmware or '')
+        return bool(m) and (int(m.group(1)), int(m.group(2))) >= STICK_MIN_VERSION
+
+    def firmware_version(self) -> Optional[str]:
+        """Ask the Arduino for its version line ('GamePRo Switch 1.6').
+        Firmware before Switch v1.6 does not answer; returns '' after the 1 s timeout."""
+        with self._lock:
+            self._serial.reset_input_buffer()
+            self._serial.write(b'V')
+            line = self._serial.readline()
+        self.firmware = line.decode('ascii', errors='ignore').strip()
+        return self.firmware
+
+    def _stick(self, angle, magnitude, duration_10ms):
+        if not self.supports_stick():
+            raise RuntimeError('The joystick needs GamePRo Switch firmware v1.6 or later '
+                               '(Flash Firmware in the app).')
+        a = int(round(angle)) % 360
+        m = max(0, min(100, int(round(magnitude))))
+        payload = bytes([ord('J'), a & 0xFF, a >> 8, m, duration_10ms])
+        with self._lock:
+            self._serial.reset_input_buffer()          # drop stale ACKs from fire()
+            old = self._serial.timeout
+            self._serial.timeout = 1 + duration_10ms / 100   # a tap can outlast 1 s
+            try:
+                self._serial.write(payload)
+                self._serial.read(1)                   # ACK 'K'
+            finally:
+                self._serial.timeout = old
 
     # ── Calibration backup / restore (firmware v4.5+ / Switch v1.2+) ──────────
 
