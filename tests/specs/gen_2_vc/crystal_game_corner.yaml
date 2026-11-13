@@ -1,0 +1,27 @@
+script: "Beta/gen_2_vc/crystal_game_corner.py"
+name: "Crystal – Game Corner"
+game: "Crystal (3DS Virtual Console)"
+console: "3DS"
+draft: true
+kind: "soft-reset hunt"
+start_state: "Crystal VC: saved in the Goldenrod Game Corner prize room next to the prize man, enough coins in the Coin Case"
+cycles: 5
+timeout_minutes: 30
+cycle_log: "Soft\\ reset\\s*\\#(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "Draw region over the prize Pokemon's sprite", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "line 131: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "the target Pokemon on screen at the moment the shiny check runs"
+  - name: "after reset"
+    when: "TODO: log line or minutes"
+    expect: "the game back at the title / save point, ready for the next cycle"
+success: "Every cycle resets, reaches the encounter/gift and logs \"not shiny\" with the screen showing the expected Pokemon. Plus one proof that detection works: a shiny reference frame, or the check value moving clearly when the target is not on screen."
+notes: "Not a port: the C++ VC_Crystal_Game_Corner is a SLOT MACHINE coin farmer (A in a loop). This script is a new prize-Pokemon shiny hunter. Calls controller.press_start() twice (does not exist - crashes); the other Crystal ports open the menu with X. Prize choice is a code constant (POKEMON_SLOT). Decide: keep as prize hunter (fix X) and/or port the coin farmer. Crash fixed in gamepro-scripts PR #3 (press_x)."
+# log lines that mean it found its target:
+#   Script paused — catch your shiny! Press ■ Stop when done.
+#   *** SHINY {}! R:{} G:{} B:{}  (baseline R:{} G:{} B:{}) ***

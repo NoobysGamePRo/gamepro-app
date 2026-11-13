@@ -1,0 +1,17 @@
+script: "Beta/gen_7_sun_moon/megamart_premier_balls.py"
+name: "USUM – Megamart Premier Balls"
+game: "Ultra Sun / Ultra Moon (3DS)"
+console: "3DS"
+draft: true
+kind: "item / BP farm"
+start_state: "USUM: saved facing the Poke Ball clerk in the Hau'oli Megamart"
+cycles: 5
+timeout_minutes: 30
+cycle_log: ""
+max_static_seconds: 120
+checkpoints:
+  - name: "loop end"
+    when: "TODO: log line or minutes"
+    expect: "back at the start position with the expected reward"
+success: "Each loop completes and the counter (money, balls, BP) changes as expected; the game ends where it started."
+notes: "Never sells the Poke Balls back - the C++ sold 100 balls every 10 loops, so the port runs out of money."

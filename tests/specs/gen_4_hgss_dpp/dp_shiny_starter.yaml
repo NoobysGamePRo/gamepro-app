@@ -1,0 +1,24 @@
+script: "Beta/gen_4_hgss_dpp/dp_shiny_starter.py"
+name: "Diamond / Pearl – Shiny Starter"
+game: "Diamond / Pearl (DS via 3DS)"
+console: "3DS (DS mode)"
+draft: true
+kind: "soft-reset hunt"
+start_state: "Diamond/Pearl: saved in the player's room before the Rowan/briefcase event"
+cycles: 5
+timeout_minutes: 30
+cycle_log: "Soft\\ reset\\s*\\#(\\d+)"
+max_static_seconds: 120
+interactive:            # a headless run must answer these
+  - "line 99: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "the target Pokemon on screen at the moment the shiny check runs"
+  - name: "after reset"
+    when: "TODO: log line or minutes"
+    expect: "the game back at the title / save point, ready for the next cycle"
+success: "Every cycle resets, reaches the encounter/gift and logs \"not shiny\" with the screen showing the expected Pokemon. Plus one proof that detection works: a shiny reference frame, or the check value moving clearly when the target is not on screen."
+notes: "C++ presses A ~27 times through the event; the port presses ~6, so it will not reach the battle. Starter is a code constant (STARTER)."
+# log lines that mean it found its target:
+#   *** SHINY {}! Detected via LDR on reset #{} ***

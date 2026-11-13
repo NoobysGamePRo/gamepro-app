@@ -1,0 +1,27 @@
+script: "Beta/gen_2_vc/crystal_shiny_gift_egg.py"
+name: "Crystal - Shiny Gift Egg"
+game: "Crystal (3DS Virtual Console)"
+console: "3DS"
+draft: true
+kind: "breeding / hatching"
+start_state: "Crystal VC: saved in front of the Day Care woman in Goldenrod, ready to receive the Odd Egg"
+cycles: 3
+timeout_minutes: 30
+cycle_log: "Soft\\ reset\\s*\\#(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "Draw region over the hatched Pokemon's sprite", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "line 217: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "hatch"
+    when: "TODO: log line or minutes"
+    expect: "the hatch animation or the hatchling summary screen"
+  - name: "end"
+    when: "TODO: log line or minutes"
+    expect: "party / box as the script expects"
+success: "Each cycle collects or hatches the expected eggs and checks every hatchling; the party/boxes end in the state the script expects."
+notes: "Baseline is one hatchling's colours but the Odd Egg hatches into 7 species - any other species reads as shiny. C++ looked for the shiny STAR on the summary screen. Walking/party flow also differs from the C++ (0.32)."
+# log lines that mean it found its target:
+#   Script paused — enjoy your shiny! Press Stop when done.
+#   *** SHINY HATCHLING! R:{} G:{} B:{}  (baseline R:{} G:{} B:{}) ***

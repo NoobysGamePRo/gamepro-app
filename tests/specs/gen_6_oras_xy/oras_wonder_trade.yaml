@@ -1,0 +1,17 @@
+script: "Beta/gen_6_oras_xy/oras_wonder_trade.py"
+name: "ORAS - Wonder Trade"
+game: "Omega Ruby / Alpha Sapphire (3DS)"
+console: "3DS"
+draft: true
+kind: "online trade"
+start_state: "ORAS: Wonder Trade available, trade Pokemon in Box 1"
+cycles: 3
+timeout_minutes: 30
+cycle_log: "Trade\\s*\\#(\\d+)"
+max_static_seconds: 120
+checkpoints:
+  - name: "trade done"
+    when: "TODO: log line or minutes"
+    expect: "trade complete screen, then back at the trade menu"
+success: "Each trade completes and the next one starts from the same screen."
+notes: "Close presses (0.92) but fixed waits replace the light-sensor check (blind)."

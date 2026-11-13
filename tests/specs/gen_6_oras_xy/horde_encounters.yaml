@@ -1,0 +1,28 @@
+script: "Beta/gen_6_oras_xy/horde_encounters.py"
+name: "XY - Horde Encounter"
+game: "X / Y (3DS) — also works in ORAS"
+console: "3DS"
+draft: true
+kind: "wild encounters"
+start_state: "X/Y or ORAS: saved where hordes appear, Sweet Scent user first in party, light sensor on the bottom screen"
+cycles: 10
+timeout_minutes: 30
+cycle_log: "Encounter\\s*\\#(\\d+)"
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "corners", prompt: "Click the 4 corners of the 3DS screen", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "line 168: parks until Stop is pressed (stop_event.wait())"
+  - "asks the user to press Stop within a time window (baseline check)"
+checkpoints:
+  - name: "encounter"
+    when: "TODO: log line or minutes"
+    expect: "a wild Pokemon on the battle screen when the check runs"
+  - name: "after flee"
+    when: "TODO: log line or minutes"
+    expect: "back in the overworld at the same spot"
+success: "Every encounter is detected, judged not shiny and fled, then walking resumes in the same area. Different species must NOT be reported as shiny. Plus one proof that detection works."
+notes: "Exact duplicate of Release/gen_6_oras_xy/horde_encounters.py - customers see it twice. Remove the Beta copy. Removed in gamepro-scripts PR #3."
+# log lines that mean it found its target:
+#   *** SHINY DETECTED! Encounter #{} — {}s >= {}s ***
+#   Script paused — catch your shiny! Press Stop when done.

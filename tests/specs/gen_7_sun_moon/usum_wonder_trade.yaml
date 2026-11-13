@@ -1,0 +1,17 @@
+script: "Beta/gen_7_sun_moon/usum_wonder_trade.py"
+name: "USUM - Wonder Trade"
+game: "Ultra Sun / Ultra Moon (3DS)"
+console: "3DS"
+draft: true
+kind: "online trade"
+start_state: "SM/USUM: Wonder Trade available, trade Pokemon in Box 1"
+cycles: 3
+timeout_minutes: 30
+cycle_log: "Trade\\s*\\#(\\d+)"
+max_static_seconds: 120
+checkpoints:
+  - name: "trade done"
+    when: "TODO: log line or minutes"
+    expect: "trade complete screen, then back at the trade menu"
+success: "Each trade completes and the next one starts from the same screen."
+notes: "Fixed wait replaces the light-sensor check (blind)."

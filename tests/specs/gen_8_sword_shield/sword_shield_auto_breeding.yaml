@@ -1,0 +1,29 @@
+script: "Beta/gen_8_sword_shield/sword_shield_auto_breeding.py"
+name: "SwSh - Auto Breeding"
+game: "Sword / Shield (Nintendo Switch)"
+console: "Switch"
+draft: true
+kind: "breeding / hatching"
+start_state: "SwSh: see the script header (Route 5 Nursery)"
+cycles: 3
+timeout_minutes: 30
+cycle_log: ""
+max_static_seconds: 120
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "rect", prompt: "Draw region over hatchling sprite", rig_key: "TODO"}
+interactive:            # a headless run must answer these
+  - "line 365: parks until Stop is pressed (stop_event.wait())"
+checkpoints:
+  - name: "hatch"
+    when: "TODO: log line or minutes"
+    expect: "the hatch animation or the hatchling summary screen"
+  - name: "end"
+    when: "TODO: log line or minutes"
+    expect: "party / box as the script expects"
+success: "Each cycle collects or hatches the expected eggs and checks every hatchling; the party/boxes end in the state the script expects."
+notes: "Close port (0.63 due to joystick moves). Uses controller._send('9'/'r') for the NE joystick - works, should become controller methods."
+# log lines that mean it found its target:
+#   Egg hatched while walking! Total hatched: {}
+#   Egg hatched while walking! Total hatched: {}
+#   Egg hatched! Total hatched: {}
+#   Egg hatched! Total hatched: {}

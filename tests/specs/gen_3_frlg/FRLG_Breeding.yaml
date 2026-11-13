@@ -1,0 +1,37 @@
+script: "Beta/gen_3_frlg/FRLG_Breeding.py"
+name: "FRLG Breeding (Magikarp)"
+game: "FireRed / LeafGreen (NSO GBA)"
+console: "Switch"
+draft: true
+kind: "breeding / hatching"
+start_state: "FRLG (NSO): see the script header (Four Island day care, Magikarp line)"
+cycles: 3
+timeout_minutes: 30
+cycle_log: ""
+max_static_seconds: 120
+settings:
+  mode: "IV breeding (Rare Candy check)"
+  min_hp: 31
+  min_atk: 31
+  min_def: 20
+  min_spa: 0
+  min_spd: 20
+  min_spe: 31
+  natures: ["Adamant", "Jolly"]
+  old_parents: "Release (bred by the script, not keepers)"
+  old_box: 5
+  keep_box: 6
+  shiny_action: "Stop with it in the party"
+  max_batches: 500
+  fresh: false
+calibration:            # answered from the rig profile in a headless run
+  - {mode: "corners", prompt: "Click the 4 corners of the GBA game picture", rig_key: "TODO"}
+checkpoints:
+  - name: "hatch"
+    when: "TODO: log line or minutes"
+    expect: "the hatch animation or the hatchling summary screen"
+  - name: "end"
+    when: "TODO: log line or minutes"
+    expect: "party / box as the script expects"
+success: "Each cycle collects or hatches the expected eggs and checks every hatchling; the party/boxes end in the state the script expects."
+notes: "Carl's current project; not part of the backlog run until Carl says it is ready."
