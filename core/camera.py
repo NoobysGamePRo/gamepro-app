@@ -22,6 +22,7 @@ class FrameGrabber:
     FRAME_HEIGHT = 480
 
     def __init__(self, index: int):
+        self.index = index                 # camera index (the video panel remembers corners per camera)
         self._cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)

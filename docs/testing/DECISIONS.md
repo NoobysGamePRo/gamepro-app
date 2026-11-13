@@ -2,6 +2,17 @@
 
 Newest first. Each entry: date, decision, why.
 
+## 2026-11-13 (Lapras live demo, dark screens)
+- **First live headless demo: FRLG Shiny Lapras, Switch 2 rig.** 5 attempts ran cleanly (reset → gift → summary). But the shiny check would have missed: the Script Builder had stored the star area in raw camera pixels, so it only lined up with the camera position at recording time. A star painted into a real frame scored 0 px. Fixed in gamepro-scripts PR #6 (the area is now a fraction of the calibrated screen; the painted star scores 134–154 px against a threshold of 10). A second 5-attempt run had no false shinies. **Lesson:** a pass needs a detection proof, not only clean cycles. A painted-reference check on a real frame is cheap and caught this.
+- **Promoted on Carl's approval:** FRLG Shiny Starter (PR #5, already used by a customer to get a shiny Squirtle) and FRLG Shiny Lapras (PR #7). The five FRLG Script Builder scripts got real descriptions in place of "Auto-generated script for …".
+- **Dark screens (Carl's call: both options).** Auto-detection can't find a mostly black screen, such as the Silph Co. room, and correctly rejects it instead of guessing. The video panel now:
+  - remembers the last confirmed corners for each camera (`calibration/screen_corners.json` next to the exe) and offers them with "✓ Use last corners" when the screen is too dark;
+  - keeps trying detection in the background, so a picture that brightens still gets found;
+  - shows a tip to open a bright screen (e.g. the party menu) before pressing Run when there are no saved corners.
+
+  Most soft-reset scripts restart the game first, so what's on screen at Run doesn't matter to them. The tip lives in the app rather than in readmes because those scripts don't have readmes.
+- **Test specs:** the Lapras spec gained `target_log: "DETECTED!"`, because the default pattern didn't match the Script Builder's wording. The rig file gained a backup `corners.default`.
+
 ## 2026-11-13 (automatic screen corners)
 - **Carl's call: one-click confirm, with manual setup as the backup.** When a script asks for the screen corners, the app now looks for the screen for about 2 s. If it finds it, it draws a green outline and a "✓ Use detected corners" button. Clicking 4 corners yourself still works and overrides it. If nothing is found, the prompt is exactly the old 4-click one. Only the 8 corner-calibration scripts are affected; the 52 that ask for a region are unchanged.
 - **Detection (`core/screen_detect.py`).** It thresholds the lit area against the bezel brightness and fits a straight line to each side with RANSAC, taking the corners from where the lines cross. Dark scenery touching an edge therefore only removes part of a side. It rejects anything that isn't solid, inside the picture, square-on (opposite sides within 5 %) and a known screen shape (GBC, DS/3DS lower, GBA, 3DS upper, Switch). A result needs at least 3 of 8 frames over 2 s to agree within 4 px.

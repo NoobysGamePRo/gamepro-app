@@ -9,6 +9,9 @@ Features:
 - 4-corner perspective warp for screen straightening (mode='corners')
 """
 
+import json
+import os
+import sys
 import tkinter as tk
 from PIL import Image, ImageTk
 import threading
@@ -24,6 +27,44 @@ PANEL_H = 480
 
 # "Use detected corners" button drawn on the canvas during corners calibration
 _AUTO_BTN = (PANEL_W // 2 - 120, PANEL_H - 52, PANEL_W // 2 + 120, PANEL_H - 16)
+
+
+# ── Last confirmed screen corners (offered when the screen is too dark to detect) ──
+
+def _corners_store_path() -> str:
+    """calibration/screen_corners.json next to the exe (or the app folder when run from source)."""
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, 'calibration', 'screen_corners.json')
+
+
+def load_last_corners(camera) -> Optional[list]:
+    try:
+        with open(_corners_store_path(), encoding='utf-8') as f:
+            pts = json.load(f).get(str(camera))
+        if isinstance(pts, list) and len(pts) == 4:
+            return [(int(x), int(y)) for x, y in pts]
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def save_last_corners(camera, pts):
+    path = _corners_store_path()
+    try:
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+        data[str(camera)] = [[int(x), int(y)] for x, y in pts]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+    except OSError:
+        pass                                   # remembering is a convenience only
 
 
 class VideoPanel(tk.Canvas):
@@ -64,7 +105,9 @@ class VideoPanel(tk.Canvas):
         self._corners_event: Optional[threading.Event] = None
         self._corners_prompt = ''
         self._auto_corners = None         # detected screen corners awaiting one-click confirm
+        self._auto_from_last = False      # True: _auto_corners are the last confirmed ones
         self._auto_searching = False
+        self._auto_failed = False         # detection has not found the screen (yet)
 
         # Perspective warp state (active after corners calibration)
         self._warp_matrix = None
@@ -161,14 +204,25 @@ class VideoPanel(tk.Canvas):
             n = len(self._corners_collected)
             auto = self._auto_corners if n == 0 else None
             if auto:
-                text = "Screen found  —  click ✓ below, or click the 4 corners"
+                if self._auto_from_last:
+                    text = "Too dark to find the screen  —  click ✓ or the 4 corners"
+                    btn = '✓  Use last corners'
+                else:
+                    text = "Screen found  —  click ✓ below, or click the 4 corners"
+                    btn = '✓  Use detected corners'
                 flat = [v for p in auto for v in p]
                 self.create_polygon(*flat, outline='#00ee55', fill='', width=3, tags='overlay')
                 x0, y0, x1, y1 = _AUTO_BTN
                 self.create_rectangle(x0, y0, x1, y1, fill='#1e8a3c', outline='white',
                                       width=2, tags='overlay')
-                self.create_text((x0 + x1) // 2, (y0 + y1) // 2, text='✓  Use detected corners',
+                self.create_text((x0 + x1) // 2, (y0 + y1) // 2, text=btn,
                                  fill='white', font=('Arial', 12, 'bold'), tags='overlay')
+            elif self._auto_failed and n == 0:
+                text = "Too dark to find the screen  —  click the 4 corners"
+                self.create_text(
+                    PANEL_W // 2, PANEL_H - 20,
+                    text="Tip: show a bright screen (e.g. the party menu) before pressing Run",
+                    fill='white', font=('Arial', 10), tags='overlay')
             elif self._auto_searching and n == 0:
                 text = f"{self._corners_prompt}  —  looking for the screen..."
             else:
@@ -242,18 +296,40 @@ class VideoPanel(tk.Canvas):
         self._corners_mode = True
 
         # Try to find the screen automatically; the person confirms with one click,
-        # or ignores it and clicks the 4 corners as before.
+        # or ignores it and clicks the 4 corners as before. A dark screen (a cave, a mostly
+        # black room) can't be found, so the last confirmed corners for this camera are
+        # offered instead, and detection keeps trying in case the picture brightens.
+        camera = getattr(self._frame_grabber, 'index', None)
+        last = load_last_corners(camera) if camera is not None else None
+        self._auto_from_last = False
+        self._auto_failed = False
         self._auto_searching = True
-        try:
-            found = detect_screen_live(self._frame_grabber, stop_event=event)
-        except Exception:
-            found = None
+        while not event.is_set() and self._corners_mode and not self._corners_collected:
+            try:
+                found = detect_screen_live(self._frame_grabber, stop_event=event)
+            except Exception:
+                found = None
+            if event.is_set() or not self._corners_mode or self._corners_collected:
+                break
+            if found:
+                self._auto_failed = False
+                self._auto_from_last = False
+                self._auto_corners = found
+                break
+            self._auto_searching = False
+            if last:
+                if self._auto_corners is None:
+                    self._auto_from_last = True
+                    self._auto_corners = last
+            else:
+                self._auto_failed = True
         self._auto_searching = False
-        if found and self._corners_mode and not self._corners_collected:
-            self._auto_corners = found
 
         event.wait()
         self._auto_corners = None
+        self._auto_failed = False
+        if self._corners_result is not None and camera is not None:
+            save_last_corners(camera, self._corners_collected)
         return self._corners_result
 
     def cancel_calibration(self):
@@ -264,6 +340,7 @@ class VideoPanel(tk.Canvas):
             self._cal_event.set()
 
         self._auto_corners = None
+        self._auto_failed = False
         if self._corners_event and not self._corners_event.is_set():
             self._corners_result = None
             self._corners_mode = False

@@ -1,14 +1,15 @@
-script: "Beta/gen_3_frlg/FRLG_Shiny_Lapras.py"
+script: "Release/gen_3_frlg/FRLG_Shiny_Lapras.py"
 name: "FRLG Shiny Lapras"
 game: "FireRed / LeafGreen (NSO GBA)"
 console: "Switch"
-draft: true
+draft: false
 kind: "soft-reset hunt"
 start_state: "FRLG (NSO): saved in Silph Co. facing the employee who gives Lapras"
 cycles: 5
 timeout_minutes: 30
 cycle_log: "Attempt\\s*(\\d+)"
 max_static_seconds: 120
+target_log: "DETECTED!"
 calibration:            # answered from the rig profile in a headless run
   - {mode: "corners", prompt: "Click the 4 corners of the Switch / Switch 2 screen", rig_key: "TODO"}
 interactive:            # a headless run must answer these
