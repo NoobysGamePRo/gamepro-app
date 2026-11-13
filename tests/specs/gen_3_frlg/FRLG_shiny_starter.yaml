@@ -1,4 +1,4 @@
-script: "Beta/gen_3_frlg/FRLG_shiny_starter.py"
+script: "Release/gen_3_frlg/FRLG_shiny_starter.py"
 name: "FRLG Shiny Starter"
 game: "FireRed / LeafGreen (NSO GBA)"
 console: "Switch"

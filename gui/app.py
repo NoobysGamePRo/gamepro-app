@@ -24,7 +24,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 import queue
-import importlib.util
 import json
 import os
 import re
@@ -49,7 +48,7 @@ from gui.video_panel import VideoPanel, PANEL_W, PANEL_H
 from gui.readme_viewer import ReadmeViewer, readme_path
 from gui.stick_pad import StickPad
 from core.script_sync import apply_retired
-from scripts.base_script import BaseScript
+from core.runner import default_scripts_dir, load_script_class, run_script
 
 # ── Manual command chars (action name → Arduino byte) ─────────────────────────
 # Used by the manual worker to fire commands without waiting for ACK.
@@ -1323,13 +1322,7 @@ class GameProApp(tk.Tk):
             self._log(f'Scripts directory not found: {scripts_dir}')
 
     def _get_scripts_dir(self) -> str:
-        if getattr(sys, 'frozen', False):
-            # External folder alongside the .exe — users can drop in new scripts
-            return os.path.join(os.path.dirname(sys.executable), 'scripts')
-        else:
-            # Development: gamepro-scripts lives alongside gamepro-app
-            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            return os.path.join(os.path.dirname(app_dir), 'gamepro-scripts')
+        return default_scripts_dir()
 
     def _check_for_scripts(self):
         """Download the latest scripts from GitHub and refresh the tree."""
@@ -1456,19 +1449,7 @@ class GameProApp(tk.Tk):
 
     def _load_script(self, path: str):
         """Dynamically load a .py file and return its BaseScript subclass, or None."""
-        try:
-            spec = importlib.util.spec_from_file_location('_gp_script', path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            for attr_name in dir(module):
-                obj = getattr(module, attr_name)
-                if (isinstance(obj, type)
-                        and issubclass(obj, BaseScript)
-                        and obj is not BaseScript):
-                    return obj
-        except Exception as e:
-            self._log(f'Failed to load {os.path.basename(path)}: {e}')
-        return None
+        return load_script_class(path, self._log)
 
     # ── Description / Readme ──────────────────────────────────────────────────
 
@@ -1554,15 +1535,14 @@ class GameProApp(tk.Tk):
 
         def thread_target():
             try:
-                script.run(
+                run_script(
+                    script,
                     controller=self._controller,
                     frame_grabber=self._grabber,
                     stop_event=self._stop_event,
                     log=self._log,
                     request_calibration=self._video_panel.request_calibration,
                 )
-            except Exception as e:
-                self._log(f'Script error: {e}')
             finally:
                 self.after(0, self._on_script_done)
 
