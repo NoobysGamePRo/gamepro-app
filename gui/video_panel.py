@@ -224,7 +224,7 @@ class VideoPanel(tk.Canvas):
                     text="Tip: show a bright screen (e.g. the party menu) before pressing Run",
                     fill='white', font=('Arial', 10), tags='overlay')
             elif self._auto_searching and n == 0:
-                text = f"{self._corners_prompt}  —  looking for the screen..."
+                text = "Finding the screen..."
             else:
                 text = (
                     f"{self._corners_prompt}  —  "
