@@ -7,11 +7,15 @@ kind: "item / BP farm"
 start_state: "USUM: saved facing the Poke Ball clerk in the Hau'oli Megamart"
 cycles: 5
 timeout_minutes: 30
-cycle_log: ""
+cycle_log: "Run \\#\\S+ complete"
 max_static_seconds: 120
 checkpoints:
-  - name: "loop end"
-    when: "TODO: log line or minutes"
-    expect: "back at the start position with the expected reward"
+  - name: "cycle end"
+    when: {log: "Run \\#\\S+ complete"}   # the end of each cycle
+    per_cycle: 1
+    expect: "back at the start position, the reward counter higher"
+  - name: "overview"
+    when: {every_minutes: 10}
+    expect: "the game running the script's loop, not stuck on a menu, error or HOME screen"
 success: "Each loop completes and the counter (money, balls, BP) changes as expected; the game ends where it started."
 notes: "Never sells the Poke Balls back - the C++ sold 100 balls every 10 loops, so the port runs out of money."

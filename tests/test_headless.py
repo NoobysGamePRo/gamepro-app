@@ -204,6 +204,22 @@ class HeadlessRunTests(unittest.TestCase):
         self.assertEqual([f['name'] for f in r['frames']].count('encounter'), 3)
         self.assertEqual(len(r['warnings']), 1)
 
+    def test_checkpoint_per_cycle(self):
+        # "Watching..." is logged many times per cycle; per_cycle: 1 keeps only the first of each cycle
+        r = self.run_script('''
+            class P(BaseScript):
+                NAME = "probe"
+                def run(self, controller, frame_grabber, stop_event, log, request_calibration):
+                    for n in range(1, 4):
+                        for _ in range(4):
+                            log("Watching... 0 px match")
+                        log(f"Attempt {n} complete.")
+                        self.wait(0.1, stop_event)
+            ''', spec={'cycle_log': r'Attempt (\d+)', 'checkpoints': [
+                {'name': 'checked screen', 'when': {'log': 'Watching'}, 'per_cycle': 1}]}, cycles=3)
+        shots = [f for f in r['frames'] if f['name'] == 'checked screen']
+        self.assertEqual([f['cycle'] for f in shots], [0, 1, 2])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,11 +7,15 @@ kind: "item / BP farm"
 start_state: "Legends Z-A: at a bench with the menu open"
 cycles: 5
 timeout_minutes: 30
-cycle_log: "Loop\\s*(\\d+)"
+cycle_log: "Loop \\S+: pressing A x6\\.\\.\\."
 max_static_seconds: 120
 checkpoints:
-  - name: "loop end"
-    when: "TODO: log line or minutes"
-    expect: "back at the start position with the expected reward"
+  - name: "cycle end"
+    when: {log: "Loop \\S+: pressing A x6\\.\\.\\."}   # the end of each cycle
+    per_cycle: 1
+    expect: "back at the start position, the reward counter higher"
+  - name: "overview"
+    when: {every_minutes: 10}
+    expect: "the game running the script's loop, not stuck on a menu, error or HOME screen"
 success: "Each loop completes and the counter (money, balls, BP) changes as expected; the game ends where it started."
 notes: "Faithful port of Carl's Python original. Blind timing."

@@ -81,26 +81,29 @@ When an answer is missing the run stops with `needs-calibration`. Add `--calibra
 
 ## Spec fields used
 
-All fields are optional. Without a spec, the run uses the default limits and doesn't count cycles.
+The full format is in [docs/testing/spec-format.md](../../docs/testing/spec-format.md). The runner uses only the fields below; without a spec it uses the default limits and doesn't count cycles.
 
 ```yaml
 cycles: 5
 timeout_minutes: 30
-cycle_log: "Soft reset #(\\d+)"        # one match = one cycle
-target_log: "\\*\\*\\* SHINY"          # optional, overrides the default
+cycle_log: "No shiny\\. Soft reset \\#\\S+"   # one match = one cycle
+target_log: "\\*\\*\\* SHINY"                 # optional, overrides the default
 max_static_seconds: 120
 settings: {mode: "Hatch only"}
 directions: [left]
 calibration:
-  - {mode: rect, prompt: "Draw region over Eevee's sprite", rig_key: TODO}
+  - {mode: rect, prompt: "Draw region over Eevee's sprite"}
 checkpoints:
-  - name: encounter
-    when: {log: "Wild .* appeared", delay_seconds: 1.0}   # frame 1 s after the log line
+  - name: checked screen
+    when: {log: "Watching", delay_seconds: 1.0}   # frame 1 s after the log line
+    per_cycle: 1                                  # at most one per cycle
   - name: overview
-    when: {every_minutes: 5}
+    when: {every_minutes: 10}
 ```
 
-`when` also accepts the strings `"log: <regex>"` and `"every 5 minutes"`. A checkpoint whose `when` is still `TODO` is skipped with a warning. All 69 drafts are like that until Phase 3.
+`when` also accepts the strings `"log: <regex>"` and `"every 5 minutes"`. A checkpoint whose `when` can't be read is skipped with a warning.
+
+Run `python tools/testing/spec_check.py` after editing a spec. It checks the spec against the script's real log lines.
 
 ## Without a robot
 

@@ -9,14 +9,11 @@ cycles: 3
 timeout_minutes: 30
 cycle_log: "egg\\s*\\#(\\d+)"
 max_static_seconds: 120
-calibration:            # answered from the rig profile in a headless run
-  - {mode: "rect", prompt: "Draw rectangle over the picnic basket / egg notification area", rig_key: "TODO"}
+calibration:            # corners: detected automatically; rects: answered from the rig profile
+  - {mode: "rect", prompt: "Draw rectangle over the picnic basket / egg notification area"}
 checkpoints:
-  - name: "hatch"
-    when: "TODO: log line or minutes"
-    expect: "the hatch animation or the hatchling summary screen"
-  - name: "end"
-    when: "TODO: log line or minutes"
-    expect: "party / box as the script expects"
+  - name: "overview"
+    when: {every_minutes: 10}   # no log line marks the check - only the overview frames
+    expect: "the game running the script's loop, not stuck on a menu, error or HOME screen"
 success: "Each cycle collects or hatches the expected eggs and checks every hatchling; the party/boxes end in the state the script expects."
 notes: "Collects eggs only (no shiny check). time.sleep(5) ignores Stop. BUG: egg check read the BGR frame as RGB (looked for cyan, never fired) - fixed in gamepro-scripts PR #3."
