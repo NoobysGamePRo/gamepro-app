@@ -133,19 +133,28 @@ def detect_screen(frame, min_area_frac=0.15, edge_margin=3):
 
 def detect_screen_live(frame_grabber, seconds=2.0, samples=8, min_agree=3, tol=4, stop_event=None):
     """
-    Try several live frames; return the median corners if at least `min_agree` frames found
-    the screen and agree within `tol` px, else None.
+    Try several live frames; return the median corners as soon as `min_agree` frames found
+    the screen and agree within `tol` px (usually under a second), or None after `samples`.
     """
     found = []
-    for _ in range(samples):
+    for i in range(samples):
         if stop_event is not None and stop_event.is_set():
             return None
+        if i:
+            time.sleep(seconds / samples)
         frame = frame_grabber.get_latest_frame() if frame_grabber is not None else None
         if frame is not None:
             pts, _ = detect_screen(frame)
             if pts is not None:
                 found.append(pts)
-        time.sleep(seconds / samples)
+                agreed = _agreeing(found, min_agree, tol)
+                if agreed is not None:
+                    return agreed
+    return None
+
+
+def _agreeing(found, min_agree, tol):
+    """Median of the detections within `tol` px of the overall median, if there are enough."""
     if len(found) < min_agree:
         return None
     arr = np.array(found, np.float64)
