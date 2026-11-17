@@ -451,7 +451,7 @@ KINDS = {
 }
 
 
-def draft_spec(row, info, note):
+def draft_spec(row, info, note, src=''):
     cal = info['calibration']
     kind = KINDS.get(note.get('kind', ''), ('?', 3, 'TODO: what a passing run means for this script',
                                              [('end', 'TODO: what the screen shows when the run stops')]))
@@ -474,16 +474,22 @@ def draft_spec(row, info, note):
             if isinstance(s, dict) and s.get('key'):
                 lines.append(f'  {s["key"]}: {json.dumps(s.get("default"))}')
     if cal:
-        lines.append('calibration:            # answered from the rig profile in a headless run')
+        lines.append('calibration:            # corners: detected automatically; rects: answered from the rig profile')
         for c in cal:
-            lines.append(f'  - {{mode: {q(c["mode"])}, prompt: {q(c["prompt"])}, rig_key: "TODO"}}')
+            lines.append(f'  - {{mode: {q(c["mode"])}, prompt: {q(c["prompt"])}}}')
     if info['interactive']:
         lines.append('interactive:            # a headless run must answer these')
         for t in dict.fromkeys(info['interactive']):
             lines.append(f'  - {q(t)}')
-    lines.append('checkpoints:')
-    for name, expect in kind[3]:
-        lines += [f'  - name: {q(name)}', '    when: "TODO: log line or minutes"', f'    expect: {q(expect)}']
+    # Checkpoints from the script's own log lines (spec_check.py, docs/testing/spec-format.md)
+    import spec_check
+    draft = {'kind': kind[0], 'cycle_log': cycle_regex(info['cycle_logs'])}
+    texts = spec_check.log_texts(src) if src else []
+    if texts:
+        draft['cycle_log'] = (spec_check.one_cycle_log(texts, draft['cycle_log']) if draft['cycle_log']
+                              else spec_check.guess_cycle_log(texts)) or draft['cycle_log']
+        lines[[i for i, l in enumerate(lines) if l.startswith('cycle_log:')][0]] = f'cycle_log: {q(draft["cycle_log"])}'
+    lines.append(spec_check.checkpoints_yaml(spec_check.draft_checkpoints(draft, src)).rstrip())
     lines += [
         f'success: {q(kind[2])}',
         f'notes: {q(note.get("notes", ""))}',
@@ -580,7 +586,7 @@ def main():
                 if not os.path.exists(sp):
                     os.makedirs(os.path.dirname(sp), exist_ok=True)
                     with open(sp, 'w', encoding='utf-8', newline='\n') as f:
-                        f.write(draft_spec(row, info, note))
+                        f.write(draft_spec(row, info, note, open(p, encoding='utf-8', errors='replace').read()))
 
     with open(a.out, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))

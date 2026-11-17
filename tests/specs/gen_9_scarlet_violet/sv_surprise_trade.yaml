@@ -7,11 +7,15 @@ kind: "online trade"
 start_state: "SV: Poke Portal reachable with Y, trade Pokemon in Box 1"
 cycles: 3
 timeout_minutes: 30
-cycle_log: "Trade\\s*\\#(\\d+)"
+cycle_log: "Trade \\#\\S+ complete\\."
 max_static_seconds: 120
 checkpoints:
-  - name: "trade done"
-    when: "TODO: log line or minutes"
-    expect: "trade complete screen, then back at the trade menu"
+  - name: "cycle end"
+    when: {log: "Trade \\#\\S+ complete\\."}   # the end of each cycle
+    per_cycle: 1
+    expect: "the trade finished and the game back at the trade menu"
+  - name: "overview"
+    when: {every_minutes: 10}
+    expect: "the game running the script's loop, not stuck on a menu, error or HOME screen"
 success: "Each trade completes and the next one starts from the same screen."
 notes: "Blind fixed waits; the C++ used the camera."

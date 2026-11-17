@@ -24,14 +24,11 @@ settings:
   shiny_action: "Stop with it in the party"
   max_batches: 500
   fresh: false
-calibration:            # answered from the rig profile in a headless run
-  - {mode: "corners", prompt: "Click the 4 corners of the GBA game picture", rig_key: "TODO"}
+calibration:            # corners: detected automatically; rects: answered from the rig profile
+  - {mode: "corners", prompt: "Click the 4 corners of the GBA game picture"}
 checkpoints:
-  - name: "hatch"
-    when: "TODO: log line or minutes"
-    expect: "the hatch animation or the hatchling summary screen"
-  - name: "end"
-    when: "TODO: log line or minutes"
-    expect: "party / box as the script expects"
+  - name: "overview"
+    when: {every_minutes: 10}   # no log line marks the check - only the overview frames
+    expect: "the game running the script's loop, not stuck on a menu, error or HOME screen"
 success: "Each cycle collects or hatches the expected eggs and checks every hatchling; the party/boxes end in the state the script expects."
 notes: "Carl's current project; not part of the backlog run until Carl says it is ready."

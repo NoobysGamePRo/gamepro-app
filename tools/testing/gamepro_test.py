@@ -183,7 +183,8 @@ class HeadlessRun:
                                      f"'when' is not 'log: <regex>' or 'every N minutes'")
             else:
                 self.checkpoints.append({'name': cp.get('name', 'checkpoint'), **w,
-                                         'taken': 0, 'next': w.get('every')})
+                                         'taken': 0, 'next': w.get('every'),
+                                         'per_cycle': int(cp.get('per_cycle') or 0), 'in_cycle': {}})
 
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
@@ -244,6 +245,11 @@ class HeadlessRun:
                 self.finish('completed', f'{len(self.cycle_times)} cycles')
         for cp in self.checkpoints:
             if 'log' in cp and cp['log'].search(msg) and cp['taken'] < self.lim['max_frames_per_checkpoint']:
+                if cp['per_cycle']:       # e.g. 1 = only the first match in each cycle
+                    c = len(self.cycle_times)
+                    if cp['in_cycle'].get(c, 0) >= cp['per_cycle']:
+                        continue
+                    cp['in_cycle'][c] = cp['in_cycle'].get(c, 0) + 1
                 cp['taken'] += 1
                 if cp['delay'] > 0:
                     threading.Timer(cp['delay'], self.save_frame, (cp['name'], msg)).start()

@@ -2,6 +2,24 @@
 
 Newest first. Each entry: date, decision, why.
 
+## 2026-11-17 (Phase 3: spec format)
+- **The format stays as drafted in Phase 1, plus two fields:**
+  - `per_cycle` on a checkpoint, so a line logged many times per cycle still gives one frame per cycle;
+  - `detection_proof` for confirmed hunts.
+  - Written up in `spec-format.md`.
+- **Specs are checked against the script, not just parsed.** `tools/testing/spec_check.py` reads the script's log lines and runs in the self-tests. On the Phase 1 drafts it found problems that would only have shown up on the robot:
+  - 18 specs whose `cycle_log` matched several lines per cycle. They would count 2–5 cycles per real cycle, so a "5 cycle" test would stop after one or two.
+  - 9 specs that would also count the shiny announcement as a cycle.
+  - FRLG Shiny Starter's "DETECTED!" not stopping the run.
+- **Checkpoints are drafted from the script's own log lines** (rules in `spec-format.md`). A log line is a better trigger than a delay: the frame is grabbed inside the script's log call, so it shows exactly the screen the check read.
+  - 66 of 69 specs got a "checked screen" or "cycle end" checkpoint.
+  - The other 3 are the breeding scripts (FRLG, SwSh, SV). For now they get only a 10-minute overview.
+  - Every spec has the overview.
+  - Three `cycle_log`s were set by hand: Celebi, Megamart and SOS chaining.
+- **`rig_key: TODO` removed.** The runner already used the default key; corners are auto-detected.
+- **Detection proof uses real shiny screenshots** (gamepro-scripts `Shiny_Images/`), never a painted star. The painted star put the Lapras area too high (fixed in PR #8, 2026-11-16).
+- **All specs except Lapras stay `draft: true`.** Lapras is confirmed: it was tested live and Carl approved the promotion. Confirming the others happens script by script, as each is run on the rig in Phase 4.
+
 ## 2026-11-13 (Lapras live demo, dark screens)
 - **First live headless demo: FRLG Shiny Lapras, Switch 2 rig.** 5 attempts ran cleanly (reset → gift → summary). But the shiny check would have missed: the Script Builder had stored the star area in raw camera pixels, so it only lined up with the camera position at recording time. A star painted into a real frame scored 0 px. Fixed in gamepro-scripts PR #6 (the area is now a fraction of the calibrated screen; the painted star scores 134–154 px against a threshold of 10). A second 5-attempt run had no false shinies. **Lesson:** a pass needs a detection proof, not only clean cycles. A painted-reference check on a real frame is cheap and caught this.
 - **Promoted on Carl's approval:** FRLG Shiny Starter (PR #5, already used by a customer to get a shiny Squirtle) and FRLG Shiny Lapras (PR #7). The five FRLG Script Builder scripts got real descriptions in place of "Auto-generated script for …".
