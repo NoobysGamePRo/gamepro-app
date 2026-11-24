@@ -1,4 +1,4 @@
-script: "Beta/gen_2_vc/crystal_shiny_starter.py"
+script: "Release/gen_2_vc/crystal_shiny_starter.py"
 name: "VC Crystal – Shiny Starter"
 game: "Crystal (3DS Virtual Console)"
 console: "3DS"
